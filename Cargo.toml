@@ -1,0 +1,19 @@
+[package]
+name = "bastille"
+version = "0.1.0"
+authors = ["Eyal Kalderon <ebkalderon@gmail.com>"]
+edition = "2018"
+
+[features]
+default = []
+piped = []
+
+[dependencies]
+ipc-channel = "0.12.2"
+libc = "0.2.65"
+os_pipe = "0.9.1"
+serde = { version = "1.0.102", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+caps = "0.3.3"
+openat = "0.1.18"
