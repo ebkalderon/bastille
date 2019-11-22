@@ -63,7 +63,8 @@ pub unsafe fn write_uid_gid_map(
 
     ns_dir
         .write_file("uid_map", 0)
-        .and_then(|mut f| writeln!(f, "{}", uid_map))?;
+        .and_then(|mut f| writeln!(f, "{}", uid_map))
+        .map_err(|_| Error::new(ErrorKind::Other, "Failed to set up uid map"))?;
 
     if deny_groups {
         let setgroups = ns_dir.write_file("setgroups", 0);
@@ -74,14 +75,15 @@ pub unsafe fn write_uid_gid_map(
             // where setgroups does not exist.
             match err.kind() {
                 ErrorKind::NotFound => {}
-                _ => return Err(err),
+                _ => return Err(Error::new(ErrorKind::Other, "Error writing to setgroups")),
             }
         }
     }
 
     ns_dir
         .write_file("gid_map", 0)
-        .and_then(|mut f| writeln!(f, "{}", gid_map))?;
+        .and_then(|mut f| writeln!(f, "{}", gid_map))
+        .map_err(|_| Error::new(ErrorKind::Other, "Failed to set up gid map"))?;
 
     if let Some(old) = old_fsuid {
         catch_io_error(libc::setfsuid(old))?;

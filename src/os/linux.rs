@@ -16,6 +16,7 @@ use crate::process::{ChildStderr, ChildStdin, ChildStdout};
 use crate::Sandbox;
 
 mod creds;
+mod net;
 mod privs;
 mod unshare;
 
@@ -82,6 +83,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // required permitted caps. This allow us to do full setup as
             // the user uid, which makes e.g. fuse access work.
             privs::switch_to_user_with_privs()?;
+            if !config.enable_network {
+                net::setup_loopback_device()?;
+            }
 
             // FIXME: Commands are currently statically forced to run in either inherit or piped
             // mode until the `std::command::Command` builder offers some way to extract its fields

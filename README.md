@@ -30,7 +30,8 @@ fine-grained access control.
       process).
 - [x] Unshare the user namespace (WIP, always on; will add the option to toggle
       off if requested, should Bastille detect the process is `setuid`).
-- [x] Unshare the network namespace (WIP).
+- [x] Unshare the network namespace (WIP, successfully unshares and creates a
+      local loopback device, but the interface has some configuration issues).
 - [ ] Unshare the PID namespace.
 - [ ] Unshare the IPC namespace.
 - [ ] Unshare the UTS (Unix socket) namespace.

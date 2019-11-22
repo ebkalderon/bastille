@@ -135,7 +135,7 @@ unsafe fn prctl_caps(
                     _ => return Err(error),
                 }
             }
-            // debug: println!("raising ambient capability {}", cap);
+            // println!("raising ambient capability {}", cap);
         }
 
         if !should_keep && do_bounding_set {
@@ -146,7 +146,7 @@ unsafe fn prctl_caps(
                     _ => return Err(error),
                 }
             }
-            // debug: println!("dropping bounding capability {}", cap);
+            // println!("dropping bounding capability {}", cap);
         }
     }
 
