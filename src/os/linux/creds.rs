@@ -35,22 +35,24 @@ pub unsafe fn write_uid_gid_map(
         let pid = pid
             .map(|pid| pid.to_string())
             .unwrap_or_else(|| "self".to_string());
-        PROC_DIR
+
+        let proc = PROC_DIR
             .as_ref()
-            .ok_or_else(|| Error::new(ErrorKind::NotFound, "Expected /proc descriptor to be open"))
-            .and_then(|proc| proc.sub_dir(format!("{}/ns", pid)))?
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, "Expected /proc to be open"))?;
+
+        proc.read_link(pid).and_then(|path| proc.sub_dir(&path))?
     };
 
     let uid_map = if map_root && parent_uid != 0 && sandbox_uid != 0 {
-        format!("0 {} 1\n{} {} 1", OVERFLOW_UID, sandbox_uid, parent_uid)
+        format!("0 {} 1\n{} {} 1\n", OVERFLOW_UID, sandbox_uid, parent_uid)
     } else {
-        format!("{} {} 1", sandbox_uid, parent_uid)
+        format!("{} {} 1\n", sandbox_uid, parent_uid)
     };
 
     let gid_map = if map_root && parent_gid != 0 && sandbox_gid != 0 {
         format!("0 {} 1\n{} {} 1", OVERFLOW_GID, sandbox_gid, parent_gid)
     } else {
-        format!("{} {} 1", sandbox_gid, parent_gid)
+        format!("{} {} 1\n", sandbox_gid, parent_gid)
     };
 
     // We have to be root to be allowed to write to the uid map for setuid apps, so temporary set
@@ -62,13 +64,13 @@ pub unsafe fn write_uid_gid_map(
     };
 
     ns_dir
-        .write_file("uid_map", 0)
-        .and_then(|mut f| writeln!(f, "{}", uid_map))
+        .update_file("uid_map", 0)
+        .and_then(|mut file| file.write_all(uid_map.as_bytes()))
         .map_err(|_| Error::new(ErrorKind::Other, "Failed to set up uid map"))?;
 
     if deny_groups {
-        let setgroups = ns_dir.write_file("setgroups", 0);
-        if let Err(err) = setgroups.and_then(|mut f| writeln!(f, "deny")) {
+        let setgroups = ns_dir.update_file("setgroups", 0);
+        if let Err(err) = setgroups.and_then(|mut file| file.write_all(b"deny\n")) {
             // If /proc/[pid]/setgroups does not exist, assume we are
             // running a linux kernel < 3.19, i.e. we live with the
             // vulnerability known as CVE-2014-8989 in older kernels
@@ -81,8 +83,8 @@ pub unsafe fn write_uid_gid_map(
     }
 
     ns_dir
-        .write_file("gid_map", 0)
-        .and_then(|mut f| writeln!(f, "{}", gid_map))
+        .update_file("gid_map", 0)
+        .and_then(|mut file| file.write_all(gid_map.as_bytes()))
         .map_err(|_| Error::new(ErrorKind::Other, "Failed to set up gid map"))?;
 
     if let Some(old) = old_fsuid {
