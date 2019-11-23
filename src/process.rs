@@ -12,7 +12,7 @@ use libc::{c_int, pid_t};
 use os_pipe::{PipeReader, PipeWriter};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::{catch_io_error, catch_io_error_repeat};
+use crate::util;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Child {
@@ -54,7 +54,7 @@ impl Child {
         }
 
         let mut status = 0 as c_int;
-        catch_io_error_repeat(|| unsafe { libc::waitpid(self.pid, &mut status, 0) })?;
+        util::catch_io_error_repeat(|| unsafe { libc::waitpid(self.pid, &mut status, 0) })?;
 
         self.status = Some(ExitStatus::from_raw(status));
         Ok(ExitStatus::from_raw(status))
@@ -66,7 +66,7 @@ impl Child {
         }
 
         let mut status = 0 as c_int;
-        let pid = catch_io_error_repeat(|| unsafe {
+        let pid = util::catch_io_error_repeat(|| unsafe {
             libc::waitpid(self.pid, &mut status, libc::WNOHANG)
         })?;
 
@@ -83,7 +83,7 @@ impl Child {
             let msg = "invalid argument: can't kill an exited process";
             Err(Error::new(ErrorKind::InvalidInput, msg))
         } else {
-            catch_io_error(unsafe { libc::kill(self.pid, libc::SIGKILL) }).map(|_| ())
+            util::catch_io_error(unsafe { libc::kill(self.pid, libc::SIGKILL) }).map(|_| ())
         }
     }
 }

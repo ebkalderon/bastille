@@ -4,7 +4,7 @@ use std::io::{Error, ErrorKind, Write};
 use libc::{c_uint, gid_t, pid_t, uid_t};
 
 use super::{IS_PRIVILEGED, OVERFLOW_GID, OVERFLOW_UID, PROC_DIR};
-use crate::catch_io_error;
+use crate::util;
 
 pub unsafe fn read_overflow_ids() -> Result<(), Error> {
     let buf = fs::read_to_string("/proc/sys/kernel/overflowuid")?;
@@ -56,7 +56,7 @@ pub unsafe fn write_uid_gid_map(
     // We have to be root to be allowed to write to the uid map for setuid apps, so temporary set
     // fsuid to 0.
     let old_fsuid = if IS_PRIVILEGED {
-        Some(catch_io_error(libc::setfsuid(0))? as c_uint)
+        Some(util::catch_io_error(libc::setfsuid(0))? as c_uint)
     } else {
         None
     };
@@ -86,7 +86,7 @@ pub unsafe fn write_uid_gid_map(
         .map_err(|_| Error::new(ErrorKind::Other, "Failed to set up gid map"))?;
 
     if let Some(old) = old_fsuid {
-        catch_io_error(libc::setfsuid(old))?;
+        util::catch_io_error(libc::setfsuid(old))?;
     }
 
     Ok(())

@@ -3,7 +3,7 @@ use std::{fs, ptr};
 
 use libc::{c_int, c_ulong, c_void, pid_t};
 
-use crate::{catch_io_error, Sandbox};
+use crate::{util, Sandbox};
 
 pub unsafe fn clone_process(config: &Sandbox) -> Result<pid_t, Error> {
     fs::metadata("/proc/self/ns/user")
@@ -29,7 +29,7 @@ pub unsafe fn clone_process(config: &Sandbox) -> Result<pid_t, Error> {
         unshare_flags |= libc::CLONE_NEWNET;
     }
 
-    catch_io_error(raw_clone(unshare_flags, ptr::null_mut()))
+    util::catch_io_error(raw_clone(unshare_flags, ptr::null_mut()))
         .map_err(|_| Error::new(ErrorKind::Other, "Unable to call raw_clone()"))
 }
 

@@ -4,7 +4,7 @@ use caps::{CapSet, Capability, CapsHashSet};
 use libc::uid_t;
 
 use super::{IS_PRIVILEGED, REAL_UID, REQUESTED_CAPS, SANDBOX_UID};
-use crate::catch_io_error;
+use crate::util;
 
 // This acquires the privileges that Bastille will need to work. If this binary is not setuid, then
 // this does nothing, and it relies on unprivileged user namespaces to be used. This case is
@@ -78,8 +78,8 @@ pub unsafe fn switch_to_user_with_privs() -> Result<(), Error> {
     }
 
     // Tell kernel not clear capabilities when later dropping root uid.
-    catch_io_error(libc::prctl(libc::PR_SET_KEEPCAPS, 1, 0, 0, 0))?;
-    catch_io_error(libc::setuid(SANDBOX_UID))?;
+    util::catch_io_error(libc::prctl(libc::PR_SET_KEEPCAPS, 1, 0, 0, 0))?;
+    util::catch_io_error(libc::setuid(SANDBOX_UID))?;
 
     // Regain effective required capabilities from permitted.
     set_required_caps()?;

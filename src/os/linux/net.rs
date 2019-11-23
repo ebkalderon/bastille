@@ -16,7 +16,7 @@ use netlink_packet_route::{
 use netlink_sys::constants::IFA_F_PERMANENT;
 use netlink_sys::{Socket, SocketAddr};
 
-use crate::catch_io_error;
+use crate::util;
 
 const LOOPBACK_NAME: *const c_char = b"lo\x00".as_ptr() as *const c_char;
 
@@ -64,7 +64,7 @@ pub fn setup_loopback_device() -> Result<(), Error> {
 
 fn create_netlink_route_socket() -> Result<Socket, Error> {
     unsafe {
-        catch_io_error(libc::socket(
+        util::catch_io_error(libc::socket(
             libc::PF_NETLINK,
             libc::SOCK_RAW | libc::SOCK_CLOEXEC,
             libc::NETLINK_ROUTE,

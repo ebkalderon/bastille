@@ -1,15 +1,14 @@
 use std::collections::HashSet;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::path::{Component, PathBuf};
 use std::process::Command;
-
-use libc::c_int;
 
 use self::process::Child;
 
 pub mod process;
 
 mod os;
+mod util;
 
 #[derive(Clone, Debug)]
 pub struct Mapping {
@@ -162,25 +161,5 @@ impl Sandbox {
 
     pub fn spawn(&self, command: &mut Command) -> Result<Child, Error> {
         os::create_sandbox(self, command)
-    }
-}
-
-fn catch_io_error_repeat<F>(mut f: F) -> Result<c_int, Error>
-where
-    F: FnMut() -> c_int,
-{
-    loop {
-        match catch_io_error(f()) {
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-            other => return other,
-        }
-    }
-}
-
-fn catch_io_error(status: c_int) -> Result<c_int, Error> {
-    if status == -1 {
-        Err(Error::last_os_error())
-    } else {
-        Ok(status)
     }
 }
