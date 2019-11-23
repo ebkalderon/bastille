@@ -43,8 +43,8 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         creds::read_overflow_ids()?;
         open_proc_dir()?;
 
-        SANDBOX_UID = config.uid.map(|uid| uid as uid_t).unwrap_or(-1i32 as uid_t);
-        SANDBOX_GID = config.gid.map(|gid| gid as gid_t).unwrap_or(-1i32 as gid_t);
+        SANDBOX_UID = config.uid.map(|uid| uid as uid_t).unwrap_or(REAL_UID);
+        SANDBOX_GID = config.gid.map(|gid| gid as gid_t).unwrap_or(REAL_GID);
 
         let (tx, rx) = ipc::channel()?;
         #[cfg(feature = "piped")]
