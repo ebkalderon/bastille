@@ -195,6 +195,13 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
             .map(|p| Path::new("/new_root").join(p))
             .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
+        if let Some(parent) = dest.parent() {
+            DirBuilder::new()
+                .mode(0o755)
+                .recursive(true)
+                .create(&parent)?;
+        }
+
         debug!("symlinking {:?} -> {:?}", source, dest);
         unix::fs::symlink(&source, &dest)?;
     }
