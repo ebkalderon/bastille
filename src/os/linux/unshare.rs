@@ -206,6 +206,16 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
         unix::fs::symlink(&source, &dest)?;
     }
 
+    for dir in &config.directories {
+        let dir = dir
+            .strip_prefix("/")
+            .map(|p| Path::new("/new_root").join(p))
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+
+        debug!("creating new directory {:?}", dir);
+        fs::create_dir_all(dir)?;
+    }
+
     Ok(())
 }
 
