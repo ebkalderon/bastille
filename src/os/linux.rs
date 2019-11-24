@@ -83,7 +83,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // caps. This allow us to do full setup as the user uid, which makes e.g. FUSE access
             // work.
             privs::switch_to_user_with_privs()?;
-            if !config.enable_network {
+            if !config.allow_network {
                 net::setup_loopback_device()?;
             }
 

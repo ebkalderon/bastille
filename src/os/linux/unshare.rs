@@ -33,10 +33,10 @@ pub unsafe fn clone_process(config: &Sandbox) -> Result<pid_t, Error> {
     }
 
     let mut unshare_flags = libc::SIGCHLD | libc::CLONE_NEWNS | libc::CLONE_NEWUSER;
-    if !config.enable_sysctl {
+    if !config.allow_sysctl {
         unshare_flags |= libc::CLONE_NEWPID;
     }
-    if !config.enable_network {
+    if !config.allow_network {
         unshare_flags |= libc::CLONE_NEWNET;
     }
 
@@ -199,7 +199,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
                 .open(&dest)?;
         }
 
-        bind_mount(&source, &dest, mapping.writable, config.enable_sysctl)?;
+        bind_mount(&source, &dest, mapping.writable, config.allow_sysctl)?;
     }
 
     for (source, dest) in &config.soft_links {

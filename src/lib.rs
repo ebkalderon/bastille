@@ -139,9 +139,9 @@ pub struct Sandbox {
     mappings: Mappings,
     soft_links: Vec<(PathBuf, PathBuf)>,
     directories: HashSet<PathBuf>,
-    enable_local_sockets: bool,
-    enable_network: bool,
-    enable_sysctl: bool,
+    allow_local_sockets: bool,
+    allow_network: bool,
+    allow_sysctl: bool,
     uid: Option<u32>,
     gid: Option<u32>,
 }
@@ -154,9 +154,9 @@ impl Sandbox {
             directories: HashSet::new(),
             uid: None,
             gid: None,
-            enable_local_sockets: false,
-            enable_network: false,
-            enable_sysctl: false,
+            allow_local_sockets: false,
+            allow_network: false,
+            allow_sysctl: false,
         }
     }
 
@@ -212,21 +212,6 @@ impl Sandbox {
         self
     }
 
-    pub fn enable_local_sockets(&mut self, enabled: bool) -> &mut Self {
-        self.enable_local_sockets = enabled;
-        self
-    }
-
-    pub fn enable_network(&mut self, enabled: bool) -> &mut Self {
-        self.enable_network = enabled;
-        self
-    }
-
-    pub fn enable_sysctl(&mut self, enabled: bool) -> &mut Self {
-        self.enable_sysctl = enabled;
-        self
-    }
-
     pub fn uid(&mut self, value: u32) -> &mut Self {
         self.uid = Some(value);
         self
@@ -234,6 +219,21 @@ impl Sandbox {
 
     pub fn gid(&mut self, value: u32) -> &mut Self {
         self.gid = Some(value);
+        self
+    }
+
+    pub fn allow_local_sockets(&mut self, enabled: bool) -> &mut Self {
+        self.allow_local_sockets = enabled;
+        self
+    }
+
+    pub fn allow_network(&mut self, enabled: bool) -> &mut Self {
+        self.allow_network = enabled;
+        self
+    }
+
+    pub fn allow_sysctl(&mut self, enabled: bool) -> &mut Self {
+        self.allow_sysctl = enabled;
         self
     }
 
