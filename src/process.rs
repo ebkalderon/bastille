@@ -6,7 +6,7 @@
 use std::io::{self, Error, ErrorKind, Read, Write};
 use std::os::unix::io::{FromRawFd, RawFd};
 use std::os::unix::process::ExitStatusExt;
-use std::process::ExitStatus;
+use std::process::{ExitStatus, Output};
 
 use libc::{c_int, pid_t};
 use os_pipe::{PipeReader, PipeWriter};
@@ -76,6 +76,40 @@ impl Child {
             self.status = Some(ExitStatus::from_raw(status));
             Ok(Some(ExitStatus::from_raw(status)))
         }
+    }
+
+    pub fn wait_with_output(&mut self) -> Result<Output, Error> {
+        drop(self.stdin.take());
+
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        match (self.stdout.take(), self.stderr.take()) {
+            (None, None) => {}
+            (Some(mut out), None) => {
+                let res = out.read_to_end(&mut stdout);
+                res.unwrap();
+            }
+            (None, Some(mut err)) => {
+                let res = err.read_to_end(&mut stderr);
+                res.unwrap();
+            }
+            (Some(mut out), Some(mut err)) => {
+                let res = out.read_to_end(&mut stdout);
+                res.unwrap();
+                let res = err.read_to_end(&mut stderr);
+                res.unwrap();
+                // FIXME: Should implement some kind of simultaneous non-blocking read of both
+                // pipes to ensure they don't block on each other. This seems to work for the short
+                // term, though. See this source file for more details:
+                // https://github.com/rust-lang/rust/blob/fae75cd216c481de048e4951697c8f8525669c65/src/libstd/sys/unix/pipe.rs#L80-L129
+            }
+        }
+
+        let status = self.wait()?;
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
+        })
     }
 
     pub fn kill(&mut self) -> Result<(), Error> {
