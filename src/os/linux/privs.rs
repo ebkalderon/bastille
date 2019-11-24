@@ -95,7 +95,7 @@ unsafe fn drop_cap_bounding_set(drop_all: bool) -> Result<(), Error> {
     }
 }
 
-unsafe fn set_required_caps() -> Result<(), Error> {
+fn set_required_caps() -> Result<(), Error> {
     let mut required = CapsHashSet::new();
     required.insert(Capability::CAP_NET_ADMIN);
     required.insert(Capability::CAP_SETGID);
@@ -112,13 +112,13 @@ unsafe fn set_required_caps() -> Result<(), Error> {
     Ok(())
 }
 
-unsafe fn has_caps() -> Result<bool, Error> {
+fn has_caps() -> Result<bool, Error> {
     caps::read(None, CapSet::Permitted)
         .map(|c| !c.is_empty())
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
 }
 
-unsafe fn prctl_caps(
+fn prctl_caps(
     caps: &[Capability],
     do_bounding_set: bool,
     do_ambient_set: bool,
