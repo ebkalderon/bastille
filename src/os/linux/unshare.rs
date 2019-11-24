@@ -54,20 +54,22 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
 
     // Mark everything as slave, so that we still receive mounts from the real root, but don't
     // propagate mounts to the real root.
+    let root = CString::new("/".as_bytes())?;
     util::catch_io_error(libc::mount(
         ptr::null(),
-        b"/\x00".as_ptr() as *const c_char,
+        root.as_ptr(),
         ptr::null(),
         libc::MS_SLAVE | libc::MS_REC,
         ptr::null(),
     ))?;
 
     // Create a tmpfs which we will use as / in the namespace.
-    let base_path = b"/tmp\x00".as_ptr() as *const c_char;
+    let base_path = CString::new("/tmp".as_bytes())?;
+    let tmpfs = CString::new("tmpfs".as_bytes())?;
     util::catch_io_error(libc::mount(
-        b"tmpfs\x00".as_ptr() as *const c_char,
-        base_path,
-        b"tmpfs\x00".as_ptr() as *const c_char,
+        tmpfs.as_ptr(),
+        base_path.as_ptr(),
+        tmpfs.as_ptr(),
         libc::MS_NODEV | libc::MS_NOSUID,
         ptr::null(),
     ))?;
@@ -99,7 +101,7 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
 
     // NB: This is our first pivot to `old_root`!
     let old_root = CString::new(old_root)?;
-    util::catch_io_error(pivot_root(base_path, old_root.as_ptr()))?;
+    util::catch_io_error(pivot_root(base_path.as_ptr(), old_root.as_ptr()))?;
     env::set_current_dir("/")?;
 
     if IS_PRIVILEGED {
@@ -137,10 +139,10 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
 
     // https://github.com/opencontainers/runc/blob/master/libcontainer/rootfs_linux.go#L671
     // https://github.com/lxc/lxc/blob/master/src/lxc/conf.c#L1121
-    let dot = b".\x00".as_ptr() as *const c_char;
-    util::catch_io_error(pivot_root(dot, dot))?;
+    let dot = CString::new(".".as_bytes())?;
+    util::catch_io_error(pivot_root(dot.as_ptr(), dot.as_ptr()))?;
     util::catch_io_error(libc::fchdir(old_root_dir.as_raw_fd()))?;
-    util::catch_io_error(libc::umount2(dot, libc::MNT_DETACH))?;
+    util::catch_io_error(libc::umount2(dot.as_ptr(), libc::MNT_DETACH))?;
     env::set_current_dir("/")?;
     env::set_var("PWD", "/");
 
@@ -261,10 +263,12 @@ fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> R
     }
 
     if flags != current_flags {
+        let none = CString::new("none".as_bytes())?;
+        let dest = CString::new(dest.as_os_str().as_bytes())?;
         util::catch_io_error(unsafe {
             libc::mount(
-                b"none\x00".as_ptr() as *const c_char,
-                CString::new(dest.as_os_str().as_bytes())?.as_ptr() as *const c_char,
+                none.as_ptr(),
+                dest.as_ptr(),
                 ptr::null(),
                 libc::MS_BIND | libc::MS_REMOUNT | flags,
                 ptr::null(),
@@ -286,11 +290,12 @@ fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> R
         }
 
         if flags != current_flags {
-            let dest = Path::new(&mount.mount_point);
+            let none = CString::new("none".as_bytes())?;
+            let dest = CString::new(mount.mount_point.as_bytes())?;
             util::catch_io_error(unsafe {
                 libc::mount(
-                    b"none\x00".as_ptr() as *const c_char,
-                    CString::new(dest.as_os_str().as_bytes())?.as_ptr() as *const c_char,
+                    none.as_ptr(),
+                    dest.as_ptr(),
                     ptr::null(),
                     libc::MS_BIND | libc::MS_REMOUNT | flags,
                     ptr::null(),

@@ -1,8 +1,8 @@
+use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use std::os::unix::io::FromRawFd;
 use std::process;
 
-use libc::c_char;
 use netlink_packet_route::constants::{RTM_NEWADDR, RTM_NEWLINK};
 use netlink_packet_route::rtnl::address::nlas::Nla;
 use netlink_packet_route::rtnl::{
@@ -18,10 +18,11 @@ use netlink_sys::{Socket, SocketAddr};
 
 use crate::util;
 
-const LOOPBACK_NAME: *const c_char = b"lo\x00".as_ptr() as *const c_char;
+const LOOPBACK_NAME: &str = "lo";
 
 pub fn setup_loopback_device() -> Result<(), Error> {
-    let if_loopback = match unsafe { libc::if_nametoindex(LOOPBACK_NAME) } {
+    let name = CString::new(LOOPBACK_NAME.as_bytes())?;
+    let if_loopback = match unsafe { libc::if_nametoindex(name.as_ptr()) } {
         index if index > 0 => index,
         _ => return Err(Error::last_os_error()),
     };
