@@ -32,10 +32,10 @@ fine-grained access control.
       off if requested, should Bastille detect the process is `setuid`).
 - [x] Unshare the network namespace (WIP, successfully unshares and creates a
       local loopback device, but the interface has some configuration issues).
-- [ ] Unshare the PID namespace.
+- [x] Unshare the PID namespace.
 - [ ] Unshare the IPC namespace.
 - [ ] Unshare the UTS (Unix socket) namespace.
-- [ ] Set up filesystem sandbox:
+- [x] Set up filesystem sandbox:
   * Canonicalize all paths in mappings (eliminating symlinks), create a new
     `tmpfs` mount point for the new root in `$base_path`, create a dir
     `$base_path/new_root`, `pivot_root()` to `$base_path`, put the old root in

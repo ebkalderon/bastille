@@ -56,9 +56,40 @@ impl Mapping {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct Mappings(Vec<Mapping>);
+
+impl Mappings {
+    pub fn push(&mut self, item: Mapping) {
+        self.0.push(item);
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    pub fn resolve_symlinks(&self) -> Result<Vec<Mapping>, Error> {
+        self.0
+            .clone()
+            .into_iter()
+            .try_fold(Vec::new(), |mut acc, mut mapping| {
+                let real = mapping.host.canonicalize()?;
+                std::mem::replace(&mut mapping.host, real);
+                acc.push(mapping);
+                Ok(acc)
+            })
+    }
+}
+
+impl Extend<Mapping> for Mappings {
+    fn extend<I: IntoIterator<Item = Mapping>>(&mut self, iter: I) {
+        self.0.extend(iter)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Sandbox {
-    mappings: Vec<Mapping>,
+    mappings: Mappings,
     soft_links: Vec<(PathBuf, PathBuf)>,
     directories: HashSet<PathBuf>,
     enable_network: bool,
@@ -71,7 +102,7 @@ pub struct Sandbox {
 impl Sandbox {
     pub fn new() -> Self {
         Sandbox {
-            mappings: Vec::new(),
+            mappings: Mappings::default(),
             soft_links: Vec::new(),
             directories: HashSet::new(),
             uid: None,

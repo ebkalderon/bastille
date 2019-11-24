@@ -108,7 +108,8 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
 
             let old_umask = libc::umask(0);
 
-            // TODO: Set up environment and sandbox ourselves.
+            // Create our mounts and sandbox ourselves.
+            unshare::setup_environment(&config)?;
 
             if ns_uid != SANDBOX_UID || ns_gid != SANDBOX_GID {
                 // Now that devpts is mounted and we no longer have a need for mount permissions,
@@ -186,6 +187,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // reparented to `init` otherwise. Here is the spot where this option gets enabled. We
             // need to figure out whether this makes sense to enable/disable, given that Bastille
             // is a library and not a free-standing binary.
+
             // Notify child process that the uid/gid map has been written and to begin setup.
             let _ = tx.send(());
 
