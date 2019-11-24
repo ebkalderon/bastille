@@ -22,6 +22,11 @@ fine-grained access control.
 ## Work in progress
 
 - [x] Spawn commands under a cloned process in a new namespace.
+- [x] Environment variables, arguments, and current working directory can be
+      configured via the standard `std::process::Command` builder.
+- [ ] Command stdio can be configured via the standard `std::process::Command`
+      builder (this is currently unsupported until rust-lang/rust#44434 is
+      resolved).
 - [x] Multiple sandboxes can be spawned in multi-threaded programs without
       interfering with each other (this is possible because `clone(2)` ensures
       process isolation between parent and sandbox).
