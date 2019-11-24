@@ -3,6 +3,7 @@ use std::io::{Error, ErrorKind};
 use std::os::unix::io::FromRawFd;
 use std::process;
 
+use log::debug;
 use netlink_packet_route::constants::{RTM_NEWADDR, RTM_NEWLINK};
 use netlink_packet_route::rtnl::address::nlas::Nla;
 use netlink_packet_route::rtnl::{
@@ -31,6 +32,7 @@ pub fn setup_loopback_device() -> Result<(), Error> {
     let dest_addr = SocketAddr::new(process::id(), 0);
     let mut socket = create_netlink_route_socket()?;
     socket.bind(&src_addr)?;
+    debug!("bound netlink socket from ({} -> ({}", src_addr, dest_addr);
 
     {
         let mut buf = [0u8; 1024];
@@ -44,6 +46,7 @@ pub fn setup_loopback_device() -> Result<(), Error> {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
         assert_eq!(addr_msg, returned);
+        debug!("sent and received netlink request: {:?}", returned);
     }
 
     {
@@ -58,6 +61,7 @@ pub fn setup_loopback_device() -> Result<(), Error> {
             .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
 
         assert_eq!(link_msg, returned);
+        debug!("sent and received netlink request: {:?}", returned);
     }
 
     Ok(())
