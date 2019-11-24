@@ -185,7 +185,18 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
                 .recursive(true)
                 .create(&dest)?;
         } else {
-            OpenOptions::new().mode(0o666).create(true).open(&dest)?;
+            if let Some(parent) = dest.parent() {
+                DirBuilder::new()
+                    .mode(0o755)
+                    .recursive(true)
+                    .create(&parent)?;
+            }
+
+            OpenOptions::new()
+                .mode(0o666)
+                .write(true)
+                .create(true)
+                .open(&dest)?;
         }
 
         bind_mount(&source, &dest, mapping.writable, config.enable_sysctl)?;
@@ -215,7 +226,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
             .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
         debug!("creating new directory {:?}", dir);
-        fs::create_dir_all(dir)?;
+        DirBuilder::new().mode(0o755).recursive(true).create(dir)?;
     }
 
     Ok(())
