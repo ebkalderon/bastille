@@ -79,9 +79,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // Wait for the parent to init uid/gid maps and drop caps.
             rx.recv().expect("Failed to communicate with parent");
 
-            // At this point we can completely drop root uid, but retain the
-            // required permitted caps. This allow us to do full setup as
-            // the user uid, which makes e.g. fuse access work.
+            // At this point we can completely drop root uid, but retain the required permitted
+            // caps. This allow us to do full setup as the user uid, which makes e.g. FUSE access
+            // work.
             privs::switch_to_user_with_privs()?;
             if !config.enable_network {
                 net::setup_loopback_device()?;
