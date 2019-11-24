@@ -100,7 +100,7 @@ impl Sandbox {
         self
     }
 
-    pub fn soft_link<P, Q>(&mut self, src: P, dest: P) -> &mut Self
+    pub fn soft_link<P, Q>(&mut self, src: P, dest: Q) -> &mut Self
     where
         P: Into<PathBuf>,
         Q: Into<PathBuf>,
