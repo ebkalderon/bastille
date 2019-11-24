@@ -1,4 +1,5 @@
 use std::io::{Error, ErrorKind};
+use std::iter::FromIterator;
 
 use caps::{CapSet, Capability, CapsHashSet};
 use libc::uid_t;
@@ -87,6 +88,26 @@ pub unsafe fn switch_to_user_with_privs() -> Result<(), Error> {
     Ok(())
 }
 
+// Call setuid() and use capset() to adjust capabilities.
+pub unsafe fn drop_privs(keep_requested_caps: bool) -> Result<(), Error> {
+    assert!(!keep_requested_caps || !IS_PRIVILEGED);
+
+    // Drop root uid.
+    if libc::getuid() == 0 {
+        util::catch_io_error(libc::setuid(SANDBOX_UID))?;
+    }
+
+    drop_all_caps(keep_requested_caps)
+}
+
+pub unsafe fn set_ambient_capabilities() -> Result<(), Error> {
+    if IS_PRIVILEGED {
+        Ok(())
+    } else {
+        prctl_caps(REQUESTED_CAPS.as_slice(), false, true)
+    }
+}
+
 unsafe fn drop_cap_bounding_set(drop_all: bool) -> Result<(), Error> {
     if drop_all {
         prctl_caps(&[], true, false)
@@ -110,6 +131,36 @@ fn set_required_caps() -> Result<(), Error> {
     caps::set(None, CapSet::Inheritable, CapsHashSet::new())
         .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
     Ok(())
+}
+
+unsafe fn drop_all_caps(keep_requested_caps: bool) -> Result<(), Error> {
+    let requested = if keep_requested_caps {
+        CapsHashSet::from_iter(REQUESTED_CAPS.clone())
+    } else {
+        CapsHashSet::new()
+    };
+
+    let result = caps::set(None, CapSet::Effective, requested.clone())
+        .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
+        .and_then(|_| {
+            caps::set(None, CapSet::Permitted, requested.clone())
+                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
+        })
+        .and_then(|_| {
+            caps::set(None, CapSet::Inheritable, requested)
+                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
+        });
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            if e.kind() == ErrorKind::PermissionDenied && REAL_UID == 0 && !IS_PRIVILEGED {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        }
+    }
 }
 
 fn has_caps() -> Result<bool, Error> {

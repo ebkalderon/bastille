@@ -106,6 +106,10 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 creds::write_uid_gid_map(ns_uid, ns_gid, REAL_UID, REAL_GID, None, true, false)?;
             }
 
+            let old_umask = libc::umask(0);
+
+            // TODO: Set up environment and sandbox ourselves.
+
             if ns_uid != SANDBOX_UID || ns_gid != SANDBOX_GID {
                 // Now that devpts is mounted and we no longer have a need for mount permissions,
                 // we can create a new userspace and map our uid 1:1.
@@ -121,11 +125,21 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 )?;
             }
 
+            // All privileged ops are done now, so drop caps that we don't need.
+            privs::drop_privs(!IS_PRIVILEGED)?;
+
+            // TODO: Set up seccomp filters here before restoring umask.
+            libc::umask(old_umask);
+
             // TODO: Bubblewrap has an option called `opt_die_with_parent` which optionally allows
             // the child process to die with SIGKILL when the parent dies. I assume it gets
             // reparented to `init` otherwise. Here is the spot where this option gets enabled. We
             // need to figure out whether this makes sense to enable/disable, given that Bastille
             // is a library and not a free-standing binary.
+
+            if !IS_PRIVILEGED {
+                privs::set_ambient_capabilities()?;
+            }
 
             // FIXME: Commands are currently statically forced to run in either inherit or piped
             // mode until the `std::command::Command` builder offers some way to extract its fields
@@ -144,7 +158,6 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // Parent, outside sandbox, privileged (initially). Discover namespace ids before we
             // drop privileges.
 
-            // creds::read_namespace_ids(pid)?;
             if IS_PRIVILEGED {
                 // We're running as euid 0, but the uid we want to map is not 0. This means we're
                 // not allowed to write this from the child user namespace, so we do it from the
@@ -163,6 +176,16 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 )?;
             }
 
+            // Initial launched process, wait for exec:ed command to exit.
+
+            // We don't need any privileges in the launcher, drop them immediately.
+            privs::drop_privs(false)?;
+
+            // TODO: Bubblewrap has an option called `opt_die_with_parent` which optionally allows
+            // the child process to die with SIGKILL when the parent dies. I assume it gets
+            // reparented to `init` otherwise. Here is the spot where this option gets enabled. We
+            // need to figure out whether this makes sense to enable/disable, given that Bastille
+            // is a library and not a free-standing binary.
             // Notify child process that the uid/gid map has been written and to begin setup.
             let _ = tx.send(());
 
