@@ -191,8 +191,6 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // Notify child process that the uid/gid map has been written and to begin setup.
             let _ = tx.send(());
 
-            // TODO: monitor child process and report exit code from child.
-
             #[cfg(feature = "piped")]
             let stdin = ChildStdin(stdin_w);
             #[cfg(feature = "piped")]
