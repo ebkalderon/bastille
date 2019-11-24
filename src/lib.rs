@@ -11,7 +11,7 @@ pub mod process;
 mod os;
 mod util;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Mapping {
     sandbox: PathBuf,
     host: PathBuf,
