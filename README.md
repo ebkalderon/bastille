@@ -25,7 +25,7 @@ fine-grained access control.
 - [x] Environment variables, arguments, and current working directory can be
       configured via the standard `std::process::Command` builder.
 - [ ] Command stdio can be configured via the standard `std::process::Command`
-      builder (this is currently unsupported until rust-lang/rust#44434 is
+      builder (this is currently unsupported until [rust-lang/rust#44434] is
       resolved).
 - [x] Multiple sandboxes can be spawned in multi-threaded programs without
       interfering with each other (this is possible because `clone(2)` ensures
@@ -53,6 +53,8 @@ fine-grained access control.
 - [ ] Add macOS backend using `sandboxd`.
 - [ ] Add FreeBSD backend using `capsicum` (don't have a box to test with ATM).
 - [ ] Add OpenBSD backend using `pledge` (don't have a box to test with ATM).
+
+[rust-lang/rust#44434]: https://github.com/rust-lang/rust/issues/44434
 
 ## Credit
 
