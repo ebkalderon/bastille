@@ -42,7 +42,7 @@ fine-grained access control.
       local loopback device, but the interface has some configuration issues).
 - [x] Unshare the PID namespace.
 - [ ] Unshare the IPC namespace.
-- [ ] Unshare the UTS (Unix socket) namespace.
+- [ ] Unshare the UTS (system hostname and NIS domain name) namespace.
 - [x] Set up filesystem sandbox:
   * Canonicalize all paths in mappings (eliminating symlinks), create a new
     `tmpfs` mount point for the new root in `$base_path`, create a dir
