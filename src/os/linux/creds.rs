@@ -50,7 +50,7 @@ pub unsafe fn write_uid_gid_map(
     };
 
     let gid_map = if map_root && parent_gid != 0 && sandbox_gid != 0 {
-        format!("0 {} 1\n{} {} 1", OVERFLOW_GID, sandbox_gid, parent_gid)
+        format!("0 {} 1\n{} {} 1\n", OVERFLOW_GID, sandbox_gid, parent_gid)
     } else {
         format!("{} {} 1\n", sandbox_gid, parent_gid)
     };
