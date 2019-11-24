@@ -3,6 +3,7 @@ use std::iter::FromIterator;
 
 use caps::{CapSet, Capability, CapsHashSet};
 use libc::uid_t;
+use log::debug;
 
 use super::{IS_PRIVILEGED, REAL_UID, REQUESTED_CAPS, SANDBOX_UID};
 use crate::util;
@@ -179,6 +180,7 @@ fn prctl_caps(
 
         let is_ambient_supported = caps::runtime::ambient_set_supported().is_ok();
         if should_keep && do_ambient_set && is_ambient_supported {
+            debug!("raising capability for ambient set: {}", cap);
             if caps::raise(None, CapSet::Ambient, *cap).is_err() {
                 let error = Error::last_os_error();
                 match error.kind() {
@@ -186,10 +188,10 @@ fn prctl_caps(
                     _ => return Err(error),
                 }
             }
-            // println!("raising ambient capability {}", cap);
         }
 
         if !should_keep && do_bounding_set {
+            debug!("dropping capability from bounding set: {}", cap);
             if caps::drop(None, CapSet::Bounding, *cap).is_err() {
                 let error = Error::last_os_error();
                 match error.kind() {
@@ -197,7 +199,6 @@ fn prctl_caps(
                     _ => return Err(error),
                 }
             }
-            // println!("dropping bounding capability {}", cap);
         }
     }
 

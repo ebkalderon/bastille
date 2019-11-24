@@ -10,6 +10,7 @@ use std::{env, ptr};
 
 use libc::{c_char, c_int, c_ulong, c_void, pid_t};
 use libmount::mountinfo;
+use log::debug;
 use openat::Dir;
 
 use super::{IS_PRIVILEGED, PROC_DIR};
@@ -108,8 +109,6 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
         setup_new_root(&config, mappings.as_slice())?;
     }
 
-    println!("environment created successfully");
-
     // The old root better be rprivate or we will send unmount events to the parent namespace.
     util::catch_io_error(libc::mount(
         old_root.as_ptr(),
@@ -119,12 +118,8 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
         ptr::null(),
     ))?;
 
-    println!("remounted old_root successfully");
-
     // Detach the old root.
     util::catch_io_error(libc::umount2(old_root.as_ptr(), libc::MNT_DETACH))?;
-
-    println!("detached old_root successfully");
 
     // NB: This is our second pivot!
     //
@@ -148,6 +143,8 @@ pub unsafe fn setup_environment(config: &Sandbox) -> Result<(), Error> {
     util::catch_io_error(libc::umount2(dot, libc::MNT_DETACH))?;
     env::set_current_dir("/")?;
     env::set_var("PWD", "/");
+
+    debug!("environment created successfully!");
 
     // FIXME: This is a hack need to call this after the umask is reset to the old value.
     if old_cwd.exists() {
@@ -198,6 +195,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
             .map(|p| Path::new("/new_root").join(p))
             .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
+        debug!("symlinking {:?} -> {:?}", source, dest);
         unix::fs::symlink(&source, &dest)?;
     }
 
@@ -205,7 +203,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
 }
 
 fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> Result<(), Error> {
-    println!("mounting {:?} -> {:?}", source, dest);
+    debug!("mounting {:?} -> {:?}", source, dest);
 
     util::catch_io_error(unsafe {
         libc::mount(
