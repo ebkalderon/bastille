@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Error;
-use std::path::{Component, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use self::process::Child;
@@ -54,6 +54,18 @@ impl Mapping {
             host: host.into(),
             writable,
         })
+    }
+
+    pub fn sandbox_path(&self) -> &Path {
+        &self.sandbox
+    }
+
+    pub fn host_path(&self) -> &Path {
+        &self.host
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.writable
     }
 }
 
