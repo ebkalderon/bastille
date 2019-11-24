@@ -139,8 +139,8 @@ pub struct Sandbox {
     mappings: Mappings,
     soft_links: Vec<(PathBuf, PathBuf)>,
     directories: HashSet<PathBuf>,
+    enable_local_sockets: bool,
     enable_network: bool,
-    enable_domain_sockets: bool,
     enable_sysctl: bool,
     uid: Option<u32>,
     gid: Option<u32>,
@@ -154,8 +154,8 @@ impl Sandbox {
             directories: HashSet::new(),
             uid: None,
             gid: None,
+            enable_local_sockets: false,
             enable_network: false,
-            enable_domain_sockets: false,
             enable_sysctl: false,
         }
     }
@@ -212,13 +212,13 @@ impl Sandbox {
         self
     }
 
-    pub fn enable_network(&mut self, enabled: bool) -> &mut Self {
-        self.enable_network = enabled;
+    pub fn enable_local_sockets(&mut self, enabled: bool) -> &mut Self {
+        self.enable_local_sockets = enabled;
         self
     }
 
-    pub fn enable_domain_sockets(&mut self, enabled: bool) -> &mut Self {
-        self.enable_domain_sockets = enabled;
+    pub fn enable_network(&mut self, enabled: bool) -> &mut Self {
+        self.enable_network = enabled;
         self
     }
 
