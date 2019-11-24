@@ -199,7 +199,13 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
                 .open(&dest)?;
         }
 
-        bind_mount(&source, &dest, mapping.writable, config.allow_dev_read)?;
+        bind_mount(
+            &source,
+            &dest,
+            mapping.writable,
+            config.allow_dev_read,
+            config.allow_sysctl,
+        )?;
     }
 
     for (source, dest) in &config.soft_links {
@@ -232,7 +238,13 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
     Ok(())
 }
 
-fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> Result<(), Error> {
+fn bind_mount(
+    source: &Path,
+    dest: &Path,
+    writable: bool,
+    allow_dev: bool,
+    allow_proc: bool,
+) -> Result<(), Error> {
     debug!("mounting {:?} -> {:?}", source, dest);
 
     util::catch_io_error(unsafe {
@@ -264,9 +276,14 @@ fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> R
     mount_points.retain(|mount| Path::new(&mount.mount_point).starts_with(&dest));
 
     let root_mount_point = mount_points.remove(0);
+    if root_mount_point.fstype.to_string_lossy() == "proc" && !allow_proc {
+        let msg = "Mounting procfs is not permitted";
+        return Err(Error::new(ErrorKind::PermissionDenied, msg));
+    }
+
     let current_flags = root_mount_point.get_flags();
     let mut flags = current_flags | libc::MS_NOSUID;
-    if !dev_access {
+    if !allow_dev {
         flags |= libc::MS_NODEV;
     }
     if !writable {
@@ -293,7 +310,7 @@ fn bind_mount(source: &Path, dest: &Path, writable: bool, dev_access: bool) -> R
     for mount in mount_points {
         let current_flags = root_mount_point.get_flags();
         let mut flags = current_flags | libc::MS_NOSUID;
-        if !dev_access {
+        if !allow_dev {
             flags |= libc::MS_NODEV;
         }
         if !writable {
