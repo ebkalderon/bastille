@@ -203,7 +203,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
             &source,
             &dest,
             mapping.writable,
-            config.allow_dev_read,
+            config.allow_devices,
             config.allow_sysctl,
         )?;
     }
@@ -242,8 +242,8 @@ fn bind_mount(
     source: &Path,
     dest: &Path,
     writable: bool,
-    allow_dev: bool,
-    allow_proc: bool,
+    allow_devices: bool,
+    allow_sysctl: bool,
 ) -> Result<(), Error> {
     debug!("mounting {:?} -> {:?}", source, dest);
 
@@ -276,14 +276,14 @@ fn bind_mount(
     mount_points.retain(|mount| Path::new(&mount.mount_point).starts_with(&dest));
 
     let root_mount_point = mount_points.remove(0);
-    if root_mount_point.fstype.to_string_lossy() == "proc" && !allow_proc {
+    if root_mount_point.fstype.to_string_lossy() == "proc" && !allow_sysctl {
         let msg = "Mounting procfs is not permitted";
         return Err(Error::new(ErrorKind::PermissionDenied, msg));
     }
 
     let current_flags = root_mount_point.get_flags();
     let mut flags = current_flags | libc::MS_NOSUID;
-    if !allow_dev {
+    if !allow_devices {
         flags |= libc::MS_NODEV;
     }
     if !writable {
@@ -308,9 +308,9 @@ fn bind_mount(
     // manually apply the flags to all submounts in the recursive case. Note: This does not apply
     // the flags to mounts which are later propagated into this namespace.
     for mount in mount_points {
-        let current_flags = root_mount_point.get_flags();
+        let current_flags = mount.get_flags();
         let mut flags = current_flags | libc::MS_NOSUID;
-        if !allow_dev {
+        if !allow_devices {
             flags |= libc::MS_NODEV;
         }
         if !writable {

@@ -7,7 +7,7 @@ fn main() {
         .mount(Mapping::from_parts("/usr", "/usr", false).unwrap())
         .mount(Mapping::from_parts("/dev", "/dev", true).unwrap())
         .soft_link("usr/lib64", "/lib64")
-        .allow_dev_read(true)
+        .allow_devices(true)
         .allow_network(true)
         .allow_sysctl(false)
         .spawn(&mut Command::new("bash").env_clear())
