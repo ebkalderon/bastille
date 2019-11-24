@@ -13,7 +13,7 @@ use openat::Dir;
 use crate::process::Child;
 #[cfg(feature = "piped")]
 use crate::process::{ChildStderr, ChildStdin, ChildStdout};
-use crate::Sandbox;
+use crate::{util, Sandbox};
 
 mod creds;
 mod net;
@@ -87,27 +87,45 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 net::setup_loopback_device()?;
             }
 
+            let mut ns_uid = SANDBOX_UID;
+            let mut ns_gid = SANDBOX_GID;
             if !IS_PRIVILEGED {
                 // In the unprivileged case we have to write the uid/gid maps in the child, because
                 // we have no caps in the parent.
 
-                // TODO: Like with `bwrap`, we might have to first map the `SANDBOX_UID` and
-                // `SANDBOX_GID` to 0, otherwise we can't mount the devpts filesystem because root
-                // is not mapped. Later, we will create another child user namespace and map back
-                // to the real uid. But before we write this code, we should investigate whether
-                // this hack should even be necessary to perform conditionally, or perhaps we could
-                // just allow device access all the time.
+                // TODO: Like with `bwrap`, we have to first map the `ns_uid` and `ns_gid` to 0,
+                // otherwise we can't mount the devpts filesystem (under the assumption we should
+                // allow dev access by default, which we are taking right now) because root is not
+                // mapped. Later, we will create another child user namespace and map back to the
+                // real uid. We should investigate whether this hack should even be necessary to
+                // perform conditionally, or perhaps we should just allow device access all the
+                // time. For now, we do the latter and always set `ns_uid` and `ns_gid` to 0.
 
+                ns_uid = 0;
+                ns_gid = 0;
+                creds::write_uid_gid_map(ns_uid, ns_gid, REAL_UID, REAL_GID, None, true, false)?;
+            }
+
+            if ns_uid != SANDBOX_UID || ns_gid != SANDBOX_GID {
+                // Now that devpts is mounted and we no longer have a need for mount permissions,
+                // we can create a new userspace and map our uid 1:1.
+                util::catch_io_error(libc::unshare(libc::CLONE_NEWUSER))?;
                 creds::write_uid_gid_map(
                     SANDBOX_UID,
                     SANDBOX_GID,
-                    REAL_UID,
-                    REAL_GID,
+                    ns_uid,
+                    ns_gid,
                     None,
-                    true,
+                    false,
                     false,
                 )?;
             }
+
+            // TODO: Bubblewrap has an option called `opt_die_with_parent` which optionally allows
+            // the child process to die with SIGKILL when the parent dies. I assume it gets
+            // reparented to `init` otherwise. Here is the spot where this option gets enabled. We
+            // need to figure out whether this makes sense to enable/disable, given that Bastille
+            // is a library and not a free-standing binary.
 
             // FIXME: Commands are currently statically forced to run in either inherit or piped
             // mode until the `std::command::Command` builder offers some way to extract its fields

@@ -28,7 +28,7 @@ fine-grained access control.
       `setfsuid` and `capset` are per-thread rather than per-process, and any
       times that Bastille does call `setuid`, we are in a separate child
       process).
-- [x] Unshare the user namespace (WIP, always on; will add the option to toggle
+- [x] Unshare the user namespace (always on; will add the option to toggle
       off if requested, should Bastille detect the process is `setuid`).
 - [x] Unshare the network namespace (WIP, successfully unshares and creates a
       local loopback device, but the interface has some configuration issues).
