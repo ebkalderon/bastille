@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Error;
 use std::path::{Component, PathBuf};
 use std::process::Command;
@@ -18,14 +19,14 @@ pub struct Mapping {
 }
 
 impl Mapping {
-    pub fn from_parts<P, Q>(sandbox: P, host: Q, writable: bool) -> Result<Self, ()>
+    pub fn from_parts<P, Q>(sandbox: P, host: Q, writable: bool) -> Result<Self, MappingError>
     where
         P: Into<PathBuf>,
         Q: Into<PathBuf>,
     {
         let sandbox_path = sandbox.into();
         if !sandbox_path.is_absolute() {
-            return Err(());
+            return Err(MappingError(ErrorKind::NotAbsolute(sandbox_path)));
         }
 
         let is_normalized = {
@@ -45,7 +46,7 @@ impl Mapping {
         };
 
         if !is_normalized {
-            return Err(());
+            return Err(MappingError(ErrorKind::NotNormalized(sandbox_path)));
         }
 
         Ok(Mapping {
@@ -53,6 +54,40 @@ impl Mapping {
             host: host.into(),
             writable,
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MappingError(ErrorKind);
+
+impl Display for MappingError {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        write!(fmt, "{}", self.0)
+    }
+}
+
+impl std::error::Error for MappingError {}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ErrorKind {
+    NotAbsolute(PathBuf),
+    NotNormalized(PathBuf),
+}
+
+impl Display for ErrorKind {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        match *self {
+            ErrorKind::NotAbsolute(ref path) => write!(
+                fmt,
+                "mount path `{}` is not absolute",
+                path.to_string_lossy()
+            ),
+            ErrorKind::NotNormalized(ref path) => write!(
+                fmt,
+                "host path `{}` is not normalized",
+                path.to_string_lossy(),
+            ),
+        }
     }
 }
 
