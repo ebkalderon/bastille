@@ -5,8 +5,9 @@ use bastille::{Mapping, Sandbox};
 fn main() {
     Sandbox::new()
         .mount(Mapping::from_parts("/usr", "/usr", false).unwrap())
-        .mount(Mapping::from_parts("/dev", "/dev", true).unwrap())
+        .mount(Mapping::from_parts("/dev/foo", "/dev/null", true).unwrap())
         .soft_link("usr/lib64", "/lib64")
+        .allow_dev_read(false)
         .allow_network(true)
         .allow_sysctl(true)
         .spawn(&mut Command::new("bash").env_clear())

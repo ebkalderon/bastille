@@ -139,6 +139,7 @@ pub struct Sandbox {
     mappings: Mappings,
     soft_links: Vec<(PathBuf, PathBuf)>,
     directories: HashSet<PathBuf>,
+    allow_dev_read: bool,
     allow_local_sockets: bool,
     allow_network: bool,
     allow_sysctl: bool,
@@ -154,6 +155,7 @@ impl Sandbox {
             directories: HashSet::new(),
             uid: None,
             gid: None,
+            allow_dev_read: false,
             allow_local_sockets: false,
             allow_network: false,
             allow_sysctl: false,
@@ -219,6 +221,11 @@ impl Sandbox {
 
     pub fn gid(&mut self, value: u32) -> &mut Self {
         self.gid = Some(value);
+        self
+    }
+
+    pub fn allow_dev_read(&mut self, enabled: bool) -> &mut Self {
+        self.allow_dev_read = enabled;
         self
     }
 

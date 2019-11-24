@@ -199,7 +199,7 @@ unsafe fn setup_new_root(config: &Sandbox, mappings: &[Mapping]) -> Result<(), E
                 .open(&dest)?;
         }
 
-        bind_mount(&source, &dest, mapping.writable, config.allow_sysctl)?;
+        bind_mount(&source, &dest, mapping.writable, config.allow_dev_read)?;
     }
 
     for (source, dest) in &config.soft_links {
