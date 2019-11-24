@@ -2,6 +2,9 @@
 
 A process sandboxing library written in Rust.
 
+Please note that this sandboxing library is a work in progress and has not yet
+been reviewed for correctness and overall security, so use at your own risk.
+
 ## Motivation
 
 At the time of writing, Arch Linux [chose to enable unprivileged namespace
