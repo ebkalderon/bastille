@@ -308,6 +308,11 @@ fn bind_mount(
     // manually apply the flags to all submounts in the recursive case. Note: This does not apply
     // the flags to mounts which are later propagated into this namespace.
     for mount in mount_points {
+        if mount.fstype.to_string_lossy() == "proc" && !allow_sysctl {
+            let msg = "Mounting procfs is not permitted";
+            return Err(Error::new(ErrorKind::PermissionDenied, msg));
+        }
+
         let current_flags = mount.get_flags();
         let mut flags = current_flags | libc::MS_NOSUID;
         if !allow_devices {
