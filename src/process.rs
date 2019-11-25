@@ -4,7 +4,7 @@
 // [blocking API]: https://github.com/tokio-rs/tokio/issues/588
 
 use std::io::{self, Error, ErrorKind, Read, Write};
-use std::os::unix::io::{FromRawFd, RawFd};
+use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::process::ExitStatusExt;
 use std::process::{ExitStatus, Output};
 
@@ -141,6 +141,12 @@ impl FromRawFd for ChildStdin {
     }
 }
 
+impl IntoRawFd for ChildStdin {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
+    }
+}
+
 #[doc(hidden)]
 impl<'de> Deserialize<'de> for ChildStdin {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -179,6 +185,12 @@ impl FromRawFd for ChildStdout {
     }
 }
 
+impl IntoRawFd for ChildStdout {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
+    }
+}
+
 #[doc(hidden)]
 impl<'de> Deserialize<'de> for ChildStdout {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -214,6 +226,12 @@ impl Read for ChildStderr {
 impl FromRawFd for ChildStderr {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         ChildStderr(PipeReader::from_raw_fd(fd))
+    }
+}
+
+impl IntoRawFd for ChildStderr {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
     }
 }
 
