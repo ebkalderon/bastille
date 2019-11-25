@@ -3,7 +3,7 @@ use std::io::{Error, ErrorKind};
 use std::os::unix::io::FromRawFd;
 use std::process;
 
-use log::debug;
+use log::{debug, trace};
 use netlink_packet_route::constants::{RTM_NEWADDR, RTM_NEWLINK};
 use netlink_packet_route::rtnl::address::nlas::Nla;
 use netlink_packet_route::rtnl::{
@@ -29,24 +29,26 @@ pub fn setup_loopback_device() -> Result<(), Error> {
     };
 
     let src_addr = SocketAddr::new(process::id(), 0);
-    let dest_addr = SocketAddr::new(process::id(), 0);
+    let dest_addr = SocketAddr::new(0, 0);
     let mut socket = create_netlink_route_socket()?;
     socket.bind(&src_addr)?;
-    debug!("bound netlink socket from ({} -> ({}", src_addr, dest_addr);
+    debug!("bound netlink route socket: {:?}", src_addr);
 
     {
         let mut buf = [0u8; 1024];
         let addr_msg = create_new_address_message(if_loopback);
         addr_msg.emit(&mut buf);
         socket.send_to(&buf, &dest_addr, 0)?;
+        debug!("sent `RTM_NEWADDR` message");
+        trace!("netlink message sent: {:?}", addr_msg);
 
         let mut buf = [0u8; 1024];
         socket.recv(&mut buf, 0)?;
-        let returned = NetlinkMessage::<RtnlMessage>::deserialize(&buf)
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+        let (_header, _payload) = NetlinkMessage::<RtnlMessage>::deserialize(&buf)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?
+            .into_parts();
 
-        assert_eq!(addr_msg, returned);
-        debug!("sent and received netlink request: {:?}", returned);
+        // TODO: Need to check response for errors.
     }
 
     {
@@ -54,14 +56,16 @@ pub fn setup_loopback_device() -> Result<(), Error> {
         let link_msg = create_new_link_message(if_loopback);
         link_msg.emit(&mut buf);
         socket.send_to(&buf, &dest_addr, 0)?;
+        debug!("sent `RTM_NEWLINK` message");
+        trace!("netlink message sent: {:?}", link_msg);
 
         let mut buf = [0u8; 1024];
         socket.recv(&mut buf, 0)?;
-        let returned = NetlinkMessage::<RtnlMessage>::deserialize(&buf)
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?;
+        let (_header, _payload) = NetlinkMessage::<RtnlMessage>::deserialize(&buf)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?
+            .into_parts();
 
-        assert_eq!(link_msg, returned);
-        debug!("sent and received netlink request: {:?}", returned);
+        // TODO: Need to check response for errors.
     }
 
     Ok(())
