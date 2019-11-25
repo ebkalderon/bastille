@@ -132,6 +132,15 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // TODO: Set up seccomp filters here before restoring umask.
             libc::umask(old_umask);
 
+            // Mitigate the CVE-2017-5226 sandbox escape by creating a new session ID. See below:
+            // https://github.com/containers/bubblewrap/issues/142
+            //
+            // TODO: Investigate using `seccomp` filters like Flatpak does because the `setsid()`
+            // call breaks job control for some applications. We should also look for
+            // cross-platform equivalents for this operation, if any. Until we can set up a good
+            // solution for this, this code will remain commented out.
+            // util::catch_io_error(libc::setsid())?;
+
             // TODO: Bubblewrap has an option called `opt_die_with_parent` which optionally allows
             // the child process to die with SIGKILL when the parent dies. I assume it gets
             // reparented to `init` otherwise. Here is the spot where this option gets enabled. We
