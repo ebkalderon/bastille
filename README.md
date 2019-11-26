@@ -50,7 +50,7 @@ fine-grained access control.
     `$base_path/old_root`. Next, set up `new_root` with all the mounts,
     directories, symlinks, etc. and `pivot_root()` again to `/new_root`,
     unmount `/old_root`, and unshare mount permissions.
-- [ ] Add macOS backend using `sandboxd`.
+- [x] Add macOS backend using `sandboxd` (very heavy WIP).
 - [ ] Add FreeBSD backend using `capsicum` (don't have a box to test with ATM).
 - [ ] Add OpenBSD backend using `pledge` (don't have a box to test with ATM).
 
