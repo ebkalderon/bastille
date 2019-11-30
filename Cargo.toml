@@ -27,3 +27,9 @@ git = "https://github.com/little-dude/netlink"
 [target.'cfg(target_os = "linux")'.dependencies.netlink-sys]
 version = "0.2.0"
 git = "https://github.com/little-dude/netlink"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+sandboxfs = "0.1.1"
+tempfile = "3.1.0"
+time = "0.1.42"
+unix-named-pipe = "0.2.0"

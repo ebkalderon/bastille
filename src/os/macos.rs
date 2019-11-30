@@ -1,27 +1,46 @@
+// TODO: Huge hack just to get example to work.
+
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
+use std::os::unix::thread::JoinHandleExt;
 use std::process::Command;
-use std::{env, ptr};
+use std::time::Duration;
+use std::{env, fs, process, ptr, thread};
 
 use libc::{c_char, c_int};
 use log::debug;
+use sandboxfs::Mapping;
+use time::Timespec;
 
 use crate::process::Child;
 use crate::{util, Sandbox};
 
-const PROFILE_HEADER: &'static str = "(version 1)\n(deny default)\n(allow process-fork)\n";
+const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process-fork)\n";
 
 pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, Error> {
-    let pid = util::catch_io_error(unsafe { libc::fork() })?;
-    if pid == 0 {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mount_point = temp_dir.path().join("mnt");
+
+    let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
+    if sandbox_pid == 0 {
+        temp_dir.into_path();
+
+        while !mount_point.join("bin").exists() {
+            thread::sleep(Duration::from_millis(10));
+        }
+
         let old_cwd = env::current_dir()?;
+        let chroot_dir = CString::new(mount_point.as_os_str().as_bytes()).unwrap();
+        util::catch_io_error(unsafe { libc::chroot(chroot_dir.as_ptr()) })?;
         env::set_current_dir("/")?;
         env::set_var("PWD", "/");
 
         let mut profile = Profile::new();
         profile.push("(allow file-read* (subpath \"/\"))\n");
+        profile.push("(allow file-write* (subpath \"/\"))\n");
         profile.push("(allow process-exec (subpath \"/\"))\n");
 
         if config.allow_devices {
@@ -48,7 +67,45 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             Err(command.exec())
         }
     } else {
-        Ok(Child::from_parts(None, None, None, pid))
+        let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
+        if fs_pid == 0 {
+            fs::create_dir_all(&mount_point)?;
+            let fifo_path = temp_dir.path().join("sandboxfs.fifo");
+            unix_named_pipe::create(&fifo_path, None)?;
+            let read = unix_named_pipe::open_read(&fifo_path)?;
+            let write = unix_named_pipe::open_write(&fifo_path)?;
+
+            let handle = thread::spawn(move || {
+                sandboxfs::mount(
+                    &mount_point,
+                    &["-o", "fs=sandboxfs"],
+                    &[
+                        Mapping::from_parts("/bin".into(), "/bin".into(), false).unwrap(),
+                        Mapping::from_parts("/usr".into(), "/usr".into(), false).unwrap(),
+                    ],
+                    Timespec::new(60, 0),
+                    read,
+                    write,
+                )
+                .expect_err("sandboxfs should not exit success")
+            });
+
+            while util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }).unwrap_or(1) == 0 {
+                thread::sleep(Duration::from_millis(10));
+            }
+
+            let thread = handle.as_pthread_t();
+            if unsafe { libc::pthread_kill(thread, libc::SIGHUP) } != 0 {
+                eprintln!("failed to send SIGHUP to sandboxfs thread");
+            }
+
+            handle.join().expect("failed to join on sandboxfs thread");
+            drop(temp_dir);
+            process::exit(0)
+        } else {
+            temp_dir.into_path();
+            Ok(Child::from_parts(None, None, None, sandbox_pid))
+        }
     }
 }
 
