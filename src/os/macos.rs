@@ -21,8 +21,27 @@ mod sandboxfs;
 const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process-fork)\n";
 
 pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, Error> {
+    let effective_uid = unsafe { libc::geteuid() };
+    let effective_gid = unsafe { libc::getegid() };
+
+    if let Some(gid) = config.gid {
+        util::catch_io_error(unsafe { libc::setegid(gid) })?;
+    }
+
+    if let Some(uid) = config.uid {
+        util::catch_io_error(unsafe { libc::seteuid(uid) })?;
+    }
+
     let temp_dir = tempfile::tempdir().unwrap();
     let mount_point = temp_dir.path().join("mnt");
+
+    if config.gid.is_some() {
+        util::catch_io_error(unsafe { libc::setegid(effective_gid) })?;
+    }
+
+    if config.uid.is_some() {
+        util::catch_io_error(unsafe { libc::seteuid(effective_uid) })?;
+    }
 
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
@@ -37,6 +56,16 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         util::catch_io_error(unsafe { libc::chroot(chroot_dir.as_ptr()) })?;
         env::set_current_dir("/")?;
         env::set_var("PWD", "/");
+
+        if let Some(gid) = config.gid {
+            debug!("setting sandbox gid to {}", gid);
+            util::catch_io_error(unsafe { libc::setgid(gid) })?;
+        }
+
+        if let Some(uid) = config.uid {
+            debug!("setting sandbox uid to {}", uid);
+            util::catch_io_error(unsafe { libc::setuid(uid) })?;
+        }
 
         let mut profile = Profile::new();
         profile.push("(allow file-read* (subpath \"/\"))\n");
@@ -69,9 +98,18 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     } else {
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
+            if let Some(gid) = config.gid {
+                util::catch_io_error(unsafe { libc::setgid(gid) })?;
+            }
+
+            if let Some(uid) = config.uid {
+                util::catch_io_error(unsafe { libc::setuid(uid) })?;
+            }
+
             let mut sandboxfs = Sandboxfs::new(temp_dir)?;
             let mounts = sandboxfs.mount(&config)?;
 
+            thread::sleep(Duration::from_millis(10));
             while util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }).unwrap_or(1) == 0 {
                 thread::sleep(Duration::from_millis(10));
             }

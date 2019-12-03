@@ -13,7 +13,7 @@ use time::Timespec;
 
 use crate::{Mappings, Sandbox};
 
-const MOUNT_OPTIONS: &[&'static str] = &["-o", "fsname=sandboxfs"];
+const MOUNT_OPTIONS: &[&'static str] = &["-o", "fsname=sandboxfs", "-o", "allow_root"];
 const TTL_SECONDS: i64 = 60;
 
 #[derive(Debug)]
