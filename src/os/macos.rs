@@ -2,23 +2,21 @@
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::fs::File;
 use std::io::{Error, ErrorKind};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::process::CommandExt;
-use std::os::unix::thread::JoinHandleExt;
 use std::process::Command;
 use std::time::Duration;
-use std::{env, fs, process, ptr, thread};
+use std::{env, ptr, thread};
 
 use libc::{c_char, c_int};
 use log::debug;
-use sandboxfs::Mapping;
-use time::Timespec;
 
+use self::sandboxfs::Sandboxfs;
 use crate::process::Child;
 use crate::{util, Sandbox};
+
+mod sandboxfs;
 
 const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process-fork)\n";
 
@@ -71,39 +69,17 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     } else {
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
-            fs::create_dir_all(&mount_point)?;
-
-            let (read, write) = os_pipe::pipe()?;
-            let read = unsafe { File::from_raw_fd(read.into_raw_fd()) };
-            let write = unsafe { File::from_raw_fd(write.into_raw_fd()) };
-
-            let handle = thread::spawn(move || {
-                sandboxfs::mount(
-                    &mount_point,
-                    &["-o", "fs=sandboxfs"],
-                    &[
-                        Mapping::from_parts("/bin".into(), "/bin".into(), false).unwrap(),
-                        Mapping::from_parts("/usr".into(), "/usr".into(), false).unwrap(),
-                    ],
-                    Timespec::new(60, 0),
-                    read,
-                    write,
-                )
-                .expect_err("sandboxfs should not exit success")
-            });
+            let mut sandboxfs = Sandboxfs::new(temp_dir)?;
+            let mounts = sandboxfs.mount(&config)?;
 
             while util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }).unwrap_or(1) == 0 {
                 thread::sleep(Duration::from_millis(10));
             }
 
-            let thread = handle.as_pthread_t();
-            if unsafe { libc::pthread_kill(thread, libc::SIGHUP) } != 0 {
-                eprintln!("failed to send SIGHUP to sandboxfs thread");
-            }
+            sandboxfs.unmount(mounts)?;
+            drop(sandboxfs);
 
-            handle.join().expect("failed to join on sandboxfs thread");
-            drop(temp_dir);
-            process::exit(0)
+            std::process::exit(0)
         } else {
             temp_dir.into_path();
             Ok(Child::from_parts(None, None, None, sandbox_pid))
