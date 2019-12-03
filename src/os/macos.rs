@@ -2,8 +2,10 @@
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
+use std::fs::File;
 use std::io::{Error, ErrorKind};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::process::CommandExt;
 use std::os::unix::thread::JoinHandleExt;
 use std::process::Command;
@@ -70,10 +72,10 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
             fs::create_dir_all(&mount_point)?;
-            let fifo_path = temp_dir.path().join("sandboxfs.fifo");
-            unix_named_pipe::create(&fifo_path, None)?;
-            let read = unix_named_pipe::open_read(&fifo_path)?;
-            let write = unix_named_pipe::open_write(&fifo_path)?;
+
+            let (read, write) = os_pipe::pipe()?;
+            let read = unsafe { File::from_raw_fd(read.into_raw_fd()) };
+            let write = unsafe { File::from_raw_fd(write.into_raw_fd()) };
 
             let handle = thread::spawn(move || {
                 sandboxfs::mount(
