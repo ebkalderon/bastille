@@ -21,6 +21,7 @@ fn main() {
 fn main() {
     Sandbox::new()
         .mount(Mapping::from_parts("/bin", "/bin", false).unwrap())
+        .mount(Mapping::from_parts("/System", "/System", false).unwrap())
         .mount(Mapping::from_parts("/usr", "/usr", false).unwrap())
         .mount(Mapping::from_parts("/dev", "/dev", true).unwrap())
         .allow_devices(true)
