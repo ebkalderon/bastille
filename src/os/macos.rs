@@ -23,32 +23,21 @@ mod sandboxfs;
 const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process*)\n";
 
 pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, Error> {
-    let effective_uid = unsafe { libc::geteuid() };
-    let effective_gid = unsafe { libc::getegid() };
+    let temp_dir = {
+        let temp_dir = tempfile::tempdir()?;
 
-    if let Some(gid) = config.gid {
-        util::catch_io_error(unsafe { libc::setegid(gid) })?;
-    }
+        let uid = config.uid.unwrap_or_else(|| unsafe { libc::getuid() });
+        let gid = config.gid.unwrap_or_else(|| unsafe { libc::getgid() });
+        let root = CString::new(temp_dir.path().as_os_str().as_bytes()).unwrap();
+        util::catch_io_error(unsafe { libc::chown(root.as_ptr(), uid, gid) })?;
 
-    if let Some(uid) = config.uid {
-        util::catch_io_error(unsafe { libc::seteuid(uid) })?;
-    }
+        temp_dir
+    };
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mount_point = temp_dir.path().join("mnt");
     let (mut tx, mut rx) = UnixStream::pair()?;
-
-    if config.gid.is_some() {
-        util::catch_io_error(unsafe { libc::setegid(effective_gid) })?;
-    }
-
-    if config.uid.is_some() {
-        util::catch_io_error(unsafe { libc::seteuid(effective_uid) })?;
-    }
-
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
-        temp_dir.into_path();
+        let mount_point = temp_dir.into_path().join("mnt");
 
         let mut buf = [0u8; 1];
         rx.read(&mut buf)?;
