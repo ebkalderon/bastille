@@ -12,7 +12,7 @@ use std::time::Duration;
 use std::{env, ptr, thread};
 
 use libc::{c_char, c_int};
-use log::debug;
+use log::{debug, trace};
 
 use self::sandboxfs::Sandboxfs;
 use crate::process::Child;
@@ -28,6 +28,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
 
         let uid = config.uid.unwrap_or_else(|| unsafe { libc::getuid() });
         let gid = config.gid.unwrap_or_else(|| unsafe { libc::getgid() });
+        trace!("setting temp directory owner to uid({}), gid({})", uid, gid);
         let root = CString::new(temp_dir.path().as_os_str().as_bytes()).unwrap();
         util::catch_io_error(unsafe { libc::chown(root.as_ptr(), uid, gid) })?;
 
@@ -43,11 +44,16 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         rx.read(&mut buf)?;
         rx.shutdown(Shutdown::Both)?;
 
+        let real_uid = unsafe { libc::getuid() };
+        util::catch_io_error(unsafe { libc::seteuid(0) })?;
+
         let old_cwd = env::current_dir()?;
         let chroot_dir = CString::new(mount_point.as_os_str().as_bytes()).unwrap();
         util::catch_io_error(unsafe { libc::chroot(chroot_dir.as_ptr()) })?;
         env::set_current_dir("/")?;
         env::set_var("PWD", "/");
+
+        util::catch_io_error(unsafe { libc::seteuid(real_uid) })?;
 
         if let Some(gid) = config.gid {
             debug!("setting sandbox gid to {}", gid);
@@ -89,13 +95,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     } else {
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
-            if let Some(gid) = config.gid {
-                util::catch_io_error(unsafe { libc::setgid(gid) })?;
-            }
-
-            if let Some(uid) = config.uid {
-                util::catch_io_error(unsafe { libc::setuid(uid) })?;
-            }
+            util::catch_io_error(unsafe { libc::setuid(0) })?;
 
             let mut sandboxfs = Sandboxfs::new(temp_dir)?;
             let mounts = sandboxfs.mount(&config)?;
