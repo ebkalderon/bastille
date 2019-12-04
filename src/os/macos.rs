@@ -70,12 +70,27 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let mut profile = Profile::new();
         profile.push("(allow file-read* (subpath \"/\"))\n");
         profile.push("(allow file-write* (subpath \"/\"))\n");
-        profile.push("(allow network* (local tcp \"*:*\"))\n");
-        profile.push("(allow network* (local udp \"*:*\"))\n");
-        profile.push("(allow system-socket)\n");
+        profile.push("(allow network-bind (local ip \"localhost:*\"))\n");
+        profile.push("(allow network-inbound (local ip \"localhost:*\"))\n");
+        profile.push("(allow sysctl-read)\n");
 
+        // FIXME: Doesn't have much of an effect, since sandboxfs does not support device files.
+        // Once that underlying limitation is resolved, this should be tested more vigorously.
         if config.allow_devices {
             profile.push("(allow file-ioctl (subpath \"/\"))\n");
+        }
+
+        if config.allow_network {
+            profile.push("(allow network* (local ip) (local tcp) (local udp))\n");
+            profile.push("(allow network* (remote ip) (remote tcp) (remote udp))\n");
+            profile.push("(allow network* (remote unix-socket))\n");
+            profile.push("(allow system-socket)\n");
+        }
+
+        // FIXME: Need to fix `ps` command here. Note that even when disabling the sandbox
+        // completely, the command still doesn't seem to work inside of a chroot.
+        if config.allow_sysctl {
+            profile.push("(allow sysctl-write)\n");
         }
 
         let mut error_buf = ptr::null_mut();
