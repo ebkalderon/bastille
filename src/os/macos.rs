@@ -19,7 +19,7 @@ use crate::{util, Sandbox};
 
 mod sandboxfs;
 
-const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process-fork)\n";
+const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process*)\n";
 
 pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, Error> {
     let effective_uid = unsafe { libc::geteuid() };
@@ -71,7 +71,6 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let mut profile = Profile::new();
         profile.push("(allow file-read* (subpath \"/\"))\n");
         profile.push("(allow file-write* (subpath \"/\"))\n");
-        profile.push("(allow process-exec (subpath \"/\"))\n");
 
         if config.allow_devices {
             profile.push("(allow file-ioctl (subpath \"/\"))\n");
