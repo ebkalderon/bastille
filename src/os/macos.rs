@@ -38,11 +38,13 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     let (mut tx, mut rx) = UnixStream::pair()?;
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
+        drop(tx);
         let mount_point = temp_dir.into_path().join("mnt");
 
         let mut buf = [0u8; 1];
         rx.read(&mut buf)?;
         rx.shutdown(Shutdown::Both)?;
+        drop(rx);
 
         let real_uid = unsafe { libc::getuid() };
         util::catch_io_error(unsafe { libc::seteuid(0) })?;
