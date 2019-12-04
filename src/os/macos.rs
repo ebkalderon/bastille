@@ -2,8 +2,9 @@
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read, Write};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 use std::time::Duration;
@@ -43,13 +44,13 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         util::catch_io_error(unsafe { libc::seteuid(effective_uid) })?;
     }
 
+    let (mut tx, mut rx) = UnixStream::pair()?;
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
         temp_dir.into_path();
 
-        while !mount_point.join("bin").exists() {
-            thread::sleep(Duration::from_millis(10));
-        }
+        let mut buf = [0u8; 1];
+        rx.read(&mut buf)?;
 
         let old_cwd = env::current_dir()?;
         let chroot_dir = CString::new(mount_point.as_os_str().as_bytes()).unwrap();
@@ -108,8 +109,8 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
 
             let mut sandboxfs = Sandboxfs::new(temp_dir)?;
             let mounts = sandboxfs.mount(&config)?;
+            tx.write(&[0])?;
 
-            thread::sleep(Duration::from_millis(10));
             while util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }).unwrap_or(1) == 0 {
                 thread::sleep(Duration::from_millis(10));
             }
