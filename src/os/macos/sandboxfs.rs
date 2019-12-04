@@ -52,6 +52,7 @@ impl Sandboxfs {
     pub fn mount(&mut self, config: &Sandbox) -> Result<Mounts, Error> {
         let (mount_msg, unmount_msg) = to_sandboxfs_messages(&config.mappings)?;
         writeln!(&mut self.input, "{}", mount_msg)?;
+        self.input.flush()?;
 
         let mut message = String::new();
         self.output.read_line(&mut message)?;

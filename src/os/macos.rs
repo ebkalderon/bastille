@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind, Read, Write};
+use std::net::Shutdown;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
@@ -35,6 +36,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
 
     let temp_dir = tempfile::tempdir().unwrap();
     let mount_point = temp_dir.path().join("mnt");
+    let (mut tx, mut rx) = UnixStream::pair()?;
 
     if config.gid.is_some() {
         util::catch_io_error(unsafe { libc::setegid(effective_gid) })?;
@@ -44,13 +46,13 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         util::catch_io_error(unsafe { libc::seteuid(effective_uid) })?;
     }
 
-    let (mut tx, mut rx) = UnixStream::pair()?;
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
         temp_dir.into_path();
 
         let mut buf = [0u8; 1];
         rx.read(&mut buf)?;
+        rx.shutdown(Shutdown::Both)?;
 
         let old_cwd = env::current_dir()?;
         let chroot_dir = CString::new(mount_point.as_os_str().as_bytes()).unwrap();
@@ -110,8 +112,15 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             let mounts = sandboxfs.mount(&config)?;
             tx.write(&[0])?;
 
-            while util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }).unwrap_or(1) == 0 {
-                thread::sleep(Duration::from_millis(10));
+            loop {
+                match util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }) {
+                    Ok(_) => thread::sleep(Duration::from_millis(10)),
+                    Err(err) => match err.raw_os_error() {
+                        Some(libc::EPERM) => thread::sleep(Duration::from_millis(10)),
+                        Some(libc::ESRCH) => break,
+                        _ => return Err(err),
+                    }
+                }
             }
 
             sandboxfs.unmount(mounts)?;
