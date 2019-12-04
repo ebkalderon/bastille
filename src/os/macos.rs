@@ -70,6 +70,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let mut profile = Profile::new();
         profile.push("(allow file-read* (subpath \"/\"))\n");
         profile.push("(allow file-write* (subpath \"/\"))\n");
+        profile.push("(allow network* (local tcp \"*:*\"))\n");
+        profile.push("(allow network* (local udp \"*:*\"))\n");
+        profile.push("(allow system-socket)\n");
 
         if config.allow_devices {
             profile.push("(allow file-ioctl (subpath \"/\"))\n");
