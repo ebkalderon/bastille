@@ -1,8 +1,8 @@
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
-use std::path::{Path, PathBuf};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::thread::JoinHandleExt;
+use std::path::{Path, PathBuf};
 use std::str;
 use std::thread::{self, JoinHandle};
 
@@ -131,8 +131,8 @@ fn to_sandboxfs_messages(mappings: &Mappings) -> Result<(String, String), Error>
 
     let mount_msg = format!("[{}]\n", mount_messages.join(","));
     let unmount_msg = format!("[{}]\n", unmount_messages.join(","));
-    debug!("sandboxfs mount message is: {}", mount_msg.replace("\n", "\\n"));
-    debug!("sandboxfs unmount message is: {}", unmount_msg.replace("\n", "\\n"));
+    debug!("mount message: {}", mount_msg.replace("\n", "\\n"));
+    debug!("unmount message: {}", unmount_msg.replace("\n", "\\n"));
 
     Ok((mount_msg, unmount_msg))
 }
