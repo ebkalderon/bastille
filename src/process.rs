@@ -10,17 +10,15 @@ use std::process::{ExitStatus, Output};
 
 use libc::{c_int, pid_t};
 use os_pipe::{PipeReader, PipeWriter};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::util;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 pub struct Child {
     pub stdin: Option<ChildStdin>,
     pub stdout: Option<ChildStdout>,
     pub stderr: Option<ChildStderr>,
     pid: pid_t,
-    #[serde(skip)]
     status: Option<ExitStatus>,
 }
 
@@ -147,29 +145,6 @@ impl IntoRawFd for ChildStdin {
     }
 }
 
-#[doc(hidden)]
-impl<'de> Deserialize<'de> for ChildStdin {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        RawFd::deserialize(deserializer)
-            .map(|fd| unsafe { PipeWriter::from_raw_fd(fd) })
-            .map(ChildStdin)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize for ChildStdin {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use std::os::unix::io::AsRawFd;
-        RawFd::serialize(&self.0.as_raw_fd(), serializer)
-    }
-}
-
 #[derive(Debug)]
 pub struct ChildStdout(pub(crate) PipeReader);
 
@@ -191,29 +166,6 @@ impl IntoRawFd for ChildStdout {
     }
 }
 
-#[doc(hidden)]
-impl<'de> Deserialize<'de> for ChildStdout {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        RawFd::deserialize(deserializer)
-            .map(|fd| unsafe { PipeReader::from_raw_fd(fd) })
-            .map(ChildStdout)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize for ChildStdout {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use std::os::unix::io::AsRawFd;
-        RawFd::serialize(&self.0.as_raw_fd(), serializer)
-    }
-}
-
 #[derive(Debug)]
 pub struct ChildStderr(pub(crate) PipeReader);
 
@@ -232,28 +184,5 @@ impl FromRawFd for ChildStderr {
 impl IntoRawFd for ChildStderr {
     fn into_raw_fd(self) -> RawFd {
         self.0.into_raw_fd()
-    }
-}
-
-#[doc(hidden)]
-impl<'de> Deserialize<'de> for ChildStderr {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        RawFd::deserialize(deserializer)
-            .map(|fd| unsafe { PipeReader::from_raw_fd(fd) })
-            .map(ChildStderr)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize for ChildStderr {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use std::os::unix::io::AsRawFd;
-        RawFd::serialize(&self.0.as_raw_fd(), serializer)
     }
 }

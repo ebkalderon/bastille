@@ -13,7 +13,6 @@ ipc-channel = "0.12.2"
 libc = "0.2.65"
 log = "0.4.8"
 os_pipe = "0.9.1"
-serde = { version = "1.0.102", features = ["derive"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 caps = "0.3.3"
