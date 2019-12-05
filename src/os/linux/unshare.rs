@@ -10,7 +10,7 @@ use std::{env, ptr};
 
 use libc::{c_char, c_int, c_ulong, c_void, pid_t};
 use libmount::mountinfo;
-use log::debug;
+use log::{debug, trace};
 use openat::Dir;
 
 use super::{IS_PRIVILEGED, PROC_DIR};
@@ -257,6 +257,8 @@ fn bind_mount(
         )
     })?;
 
+    trace!("mounted successfully");
+
     let mount_info = unsafe {
         let proc = PROC_DIR
             .as_ref()
@@ -274,6 +276,9 @@ fn bind_mount(
         .collect::<Result<_, _>>()?;
 
     mount_points.retain(|mount| Path::new(&mount.mount_point).starts_with(&dest));
+    mount_points.reverse();
+    mount_points.dedup_by(|m1, m2| Path::new(&m1.mount_point) == Path::new(&m2.mount_point));
+    mount_points.reverse();
 
     let root_mount_point = mount_points.remove(0);
     if root_mount_point.fstype.to_string_lossy() == "proc" && !allow_sysctl {
@@ -281,6 +286,7 @@ fn bind_mount(
         return Err(Error::new(ErrorKind::PermissionDenied, msg));
     }
 
+    assert_eq!(root_mount_point.mount_point, dest);
     let current_flags = root_mount_point.get_flags();
     let mut flags = current_flags | libc::MS_NOSUID;
     if !allow_devices {
@@ -290,7 +296,10 @@ fn bind_mount(
         flags |= libc::MS_RDONLY;
     }
 
+    trace!("MS_NODEV: {}, MS_RDONLY: {}", !allow_devices, !writable);
+    trace!("new flags: {}, current flags: {}", flags, current_flags);
     if flags != current_flags {
+        trace!("remounting {:?}", dest);
         let none = CString::new("none".as_bytes())?;
         let dest = CString::new(dest.as_os_str().as_bytes())?;
         util::catch_io_error(unsafe {
@@ -302,6 +311,7 @@ fn bind_mount(
                 ptr::null(),
             )
         })?;
+        trace!("successfully remounted {:?}", dest);
     }
 
     // We need to work around the fact that a bind mount does not apply the flags, so we need to
@@ -322,10 +332,13 @@ fn bind_mount(
             flags |= libc::MS_RDONLY;
         }
 
+        trace!("MS_NODEV: {}, MS_RDONLY: {}", !allow_devices, !writable);
+        trace!("new: {}, current: {}", flags, current_flags);
         if flags != current_flags {
+            trace!("remounting {:?}", mount.mount_point);
             let none = CString::new("none".as_bytes())?;
             let dest = CString::new(mount.mount_point.as_bytes())?;
-            util::catch_io_error(unsafe {
+            let result = util::catch_io_error(unsafe {
                 libc::mount(
                     none.as_ptr(),
                     dest.as_ptr(),
@@ -333,9 +346,18 @@ fn bind_mount(
                     libc::MS_BIND | libc::MS_REMOUNT | flags,
                     ptr::null(),
                 )
-            })?;
+            });
+
+            if let Err(err) = result {
+                if err.raw_os_error() != Some(libc::EACCES) {
+                    return Err(err);
+                }
+            }
+
+            trace!("successfully remounted {:?}", dest);
         }
     }
 
+    trace!("recursive bind mount complete");
     Ok(())
 }
