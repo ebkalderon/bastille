@@ -16,6 +16,8 @@ use log::{debug, trace};
 
 use self::sandboxfs::Sandboxfs;
 use crate::process::Child;
+#[cfg(feature = "piped")]
+use crate::process::{ChildStderr, ChildStdin, ChildStdout};
 use crate::{util, Sandbox};
 
 mod sandboxfs;
@@ -36,9 +38,23 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     };
 
     let (mut tx, mut rx) = UnixStream::pair()?;
+    #[cfg(feature = "piped")]
+    let (stdin_r, stdin_w) = os_pipe::pipe()?;
+    #[cfg(feature = "piped")]
+    let (stdout_r, stdout_w) = os_pipe::pipe()?;
+    #[cfg(feature = "piped")]
+    let (stderr_r, stderr_w) = os_pipe::pipe()?;
+
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
         drop(tx);
+        #[cfg(feature = "piped")]
+        drop(stdin_w);
+        #[cfg(feature = "piped")]
+        drop(stdout_r);
+        #[cfg(feature = "piped")]
+        drop(stderr_r);
+
         let mount_point = temp_dir.into_path().join("mnt");
 
         let mut buf = [0u8; 1];
@@ -110,11 +126,30 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 }
             }
 
-            Err(command.exec())
+            // FIXME: Commands are currently statically forced to run in either inherit or piped
+            // mode until the `std::command::Command` builder offers some way to extract its fields
+            // and inspect them at run-time.
+            #[cfg(feature = "piped")]
+            let error = command
+                .stdin(stdin_r)
+                .stdout(stdout_w)
+                .stderr(stderr_w)
+                .exec();
+            #[cfg(not(feature = "piped"))]
+            let error = command.exec();
+
+            Err(error)
         }
     } else {
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
+            #[cfg(feature = "piped")]
+            drop(stdin_w);
+            #[cfg(feature = "piped")]
+            drop(stdout_r);
+            #[cfg(feature = "piped")]
+            drop(stderr_r);
+
             util::catch_io_error(unsafe { libc::setuid(0) })?;
 
             let mut sandboxfs = Sandboxfs::new(temp_dir)?;
@@ -128,7 +163,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                         Some(libc::EPERM) => thread::sleep(Duration::from_millis(10)),
                         Some(libc::ESRCH) => break,
                         _ => return Err(err),
-                    }
+                    },
                 }
             }
 
@@ -138,7 +173,17 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             std::process::exit(0)
         } else {
             temp_dir.into_path();
-            Ok(Child::from_parts(None, None, None, sandbox_pid))
+
+            #[cfg(feature = "piped")]
+            let stdin = ChildStdin(stdin_w);
+            #[cfg(feature = "piped")]
+            let stdout = ChildStdout(stdout_r);
+            #[cfg(feature = "piped")]
+            let stderr = ChildStderr(stderr_r);
+            #[cfg(not(feature = "piped"))]
+            let (stdin, stdout, stderr) = (None, None, None);
+
+            Ok(Child::from_parts(stdin, stdout, stderr, sandbox_pid))
         }
     }
 }
