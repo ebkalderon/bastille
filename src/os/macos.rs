@@ -17,7 +17,9 @@ use log::{debug, trace};
 use self::sandboxfs::Sandboxfs;
 use crate::process::Child;
 #[cfg(feature = "piped")]
-use crate::process::{ChildStderr, ChildStdin, ChildStdout};
+use crate::process::ChildStderr;
+#[cfg(any(feature = "piped", feature = "piped-merged"))]
+use crate::process::{ChildStdin, ChildStdout};
 use crate::{util, Sandbox};
 
 mod sandboxfs;
@@ -38,9 +40,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     };
 
     let (mut tx, mut rx) = UnixStream::pair()?;
-    #[cfg(feature = "piped")]
+    #[cfg(any(feature = "piped", feature = "piped-merged"))]
     let (stdin_r, stdin_w) = os_pipe::pipe()?;
-    #[cfg(feature = "piped")]
+    #[cfg(any(feature = "piped", feature = "piped-merged"))]
     let (stdout_r, stdout_w) = os_pipe::pipe()?;
     #[cfg(feature = "piped")]
     let (stderr_r, stderr_w) = os_pipe::pipe()?;
@@ -48,9 +50,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     let sandbox_pid = util::catch_io_error(unsafe { libc::fork() })?;
     if sandbox_pid == 0 {
         drop(tx);
-        #[cfg(feature = "piped")]
+        #[cfg(any(feature = "piped", feature = "piped-merged"))]
         drop(stdin_w);
-        #[cfg(feature = "piped")]
+        #[cfg(any(feature = "piped", feature = "piped-merged"))]
         drop(stdout_r);
         #[cfg(feature = "piped")]
         drop(stderr_r);
@@ -135,7 +137,13 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 .stdout(stdout_w)
                 .stderr(stderr_w)
                 .exec();
-            #[cfg(not(feature = "piped"))]
+            #[cfg(feature = "piped-merged")]
+            let error = command
+                .stdin(stdin_r)
+                .stdout(stdout_w.try_clone()?)
+                .stderr(stdout_w)
+                .exec();
+            #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
             let error = command.exec();
 
             Err(error)
@@ -143,9 +151,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
     } else {
         let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
         if fs_pid == 0 {
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             drop(stdin_w);
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             drop(stdout_r);
             #[cfg(feature = "piped")]
             drop(stderr_r);
@@ -174,13 +182,17 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         } else {
             temp_dir.into_path();
 
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             let stdin = ChildStdin(stdin_w);
             #[cfg(feature = "piped")]
             let stdout = ChildStdout(stdout_r);
+            #[cfg(feature = "piped-merged")]
+            let stdout = ChildStdout(stdout_r);
             #[cfg(feature = "piped")]
             let stderr = ChildStderr(stderr_r);
-            #[cfg(not(feature = "piped"))]
+            #[cfg(feature = "piped-merged")]
+            let stderr = None;
+            #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
             let (stdin, stdout, stderr) = (None, None, None);
 
             Ok(Child::from_parts(stdin, stdout, stderr, sandbox_pid))

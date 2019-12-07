@@ -12,7 +12,9 @@ use openat::Dir;
 
 use crate::process::Child;
 #[cfg(feature = "piped")]
-use crate::process::{ChildStderr, ChildStdin, ChildStdout};
+use crate::process::ChildStderr;
+#[cfg(any(feature = "piped", feature = "piped-merged"))]
+use crate::process::{ChildStdin, ChildStdout};
 use crate::{util, Sandbox};
 
 mod creds;
@@ -47,9 +49,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         SANDBOX_GID = config.gid.map(|gid| gid as gid_t).unwrap_or(REAL_GID);
 
         let (tx, rx) = ipc::channel()?;
-        #[cfg(feature = "piped")]
+        #[cfg(any(feature = "piped", feature = "piped-merged"))]
         let (stdin_r, stdin_w) = os_pipe::pipe()?;
-        #[cfg(feature = "piped")]
+        #[cfg(any(feature = "piped", feature = "piped-merged"))]
         let (stdout_r, stdout_w) = os_pipe::pipe()?;
         #[cfg(feature = "piped")]
         let (stderr_r, stderr_w) = os_pipe::pipe()?;
@@ -69,9 +71,9 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // outside the sandbox either.
 
             drop(tx);
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             drop(stdin_w);
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             drop(stdout_r);
             #[cfg(feature = "piped")]
             drop(stderr_r);
@@ -160,7 +162,13 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                 .stdout(stdout_w)
                 .stderr(stderr_w)
                 .exec();
-            #[cfg(not(feature = "piped"))]
+            #[cfg(feature = "piped-merged")]
+            let error = command
+                .stdin(stdin_r)
+                .stdout(stdout_w.try_clone()?)
+                .stderr(stdout_w)
+                .exec();
+            #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
             let error = command.exec();
 
             Err(error)
@@ -200,13 +208,17 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             // Notify child process that the uid/gid map has been written and to begin setup.
             let _ = tx.send(());
 
-            #[cfg(feature = "piped")]
+            #[cfg(any(feature = "piped", feature = "piped-merged"))]
             let stdin = ChildStdin(stdin_w);
             #[cfg(feature = "piped")]
             let stdout = ChildStdout(stdout_r);
+            #[cfg(feature = "piped-merged")]
+            let stdout = ChildStdout(stdout_r);
             #[cfg(feature = "piped")]
             let stderr = ChildStderr(stderr_r);
-            #[cfg(not(feature = "piped"))]
+            #[cfg(feature = "piped-merged")]
+            let stderr = None;
+            #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
             let (stdin, stdout, stderr) = (None, None, None);
 
             Ok(Child::from_parts(stdin, stdout, stderr, pid))
