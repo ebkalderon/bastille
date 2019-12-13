@@ -1,4 +1,6 @@
 fn main() {
-    #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-lib=dylib=sandbox");
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-search=native=/usr/lib");
+        println!("cargo:rustc-link-lib=sandbox");
+    }
 }
