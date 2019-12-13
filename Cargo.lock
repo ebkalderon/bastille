@@ -58,6 +58,7 @@ dependencies = [
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "netlink-packet-route 0.1.0 (git+https://github.com/little-dude/netlink)",
  "netlink-sys 0.2.0 (git+https://github.com/little-dude/netlink)",
+ "once_cell 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "openat 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "os_pipe 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "sandboxfs 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -435,6 +436,11 @@ dependencies = [
  "libc 0.2.65 (registry+https://github.com/rust-lang/crates.io-index)",
  "void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "once_cell"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "openat"
@@ -859,6 +865,7 @@ dependencies = [
 "checksum netlink-sys 0.2.0 (git+https://github.com/little-dude/netlink)" = "<none>"
 "checksum nix 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)" = "319fffb13b63c0f4ff5a4e1c97566e7e741561ff5d03bf8bbf11653454bbd70b"
 "checksum nix 0.14.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6c722bee1037d430d0f8e687bbdbf222f27cc6e4e68d5caf630857bb2b6dbdce"
+"checksum once_cell 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "891f486f630e5c5a4916c7e16c4b24a53e78c860b646e9f8e005e4f16847bfed"
 "checksum openat 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)" = "cce57a26bf1be2fd7f170bf3bdcd94a07a6d28d3cb1f3aa368453126cf42819a"
 "checksum os_pipe 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)" = "db4d06355a7090ce852965b2d08e11426c315438462638c6d721448d0b47aa22"
 "checksum paste 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "423a519e1c6e828f1e73b720f9d9ed2fa643dce8a7737fb43235ce0b41eeaa49"

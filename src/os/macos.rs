@@ -8,11 +8,13 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{env, ptr, thread};
 
 use libc::{c_char, c_int};
 use log::{debug, trace};
+use once_cell::sync::Lazy;
 
 use self::sandboxfs::Sandboxfs;
 use crate::process::Child;
@@ -25,6 +27,11 @@ use crate::{util, Sandbox};
 mod sandboxfs;
 
 const PROFILE_HEADER: &str = "(version 1)\n(deny default)\n(allow process*)\n";
+
+static HANDLES: Lazy<Mutex<Vec<Option<thread::JoinHandle<()>>>>> = Lazy::new(|| {
+    unsafe { libc::atexit(on_shutdown) };
+    Mutex::new(Vec::new())
+});
 
 pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, Error> {
     let temp_dir = {
@@ -149,52 +156,44 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             Err(error)
         }
     } else {
-        let fs_pid = util::catch_io_error(unsafe { libc::fork() })?;
-        if fs_pid == 0 {
-            #[cfg(any(feature = "piped", feature = "piped-merged"))]
-            drop(stdin_w);
-            #[cfg(any(feature = "piped", feature = "piped-merged"))]
-            drop(stdout_r);
-            #[cfg(feature = "piped")]
-            drop(stderr_r);
+        let mut sandboxfs = Sandboxfs::new(temp_dir)?;
+        let mounts = sandboxfs.mount(&config)?;
 
-            let mut sandboxfs = Sandboxfs::new(temp_dir)?;
-            let mounts = sandboxfs.mount(&config)?;
-            tx.write(&[0])?;
+        let handle = thread::Builder::new()
+            .name("sandboxfs-monitor".into())
+            .spawn(move || {
+                tx.write(&[0]).unwrap();
 
-            loop {
-                match util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }) {
-                    Ok(_) => thread::sleep(Duration::from_millis(10)),
-                    Err(err) => match err.raw_os_error() {
-                        Some(libc::EPERM) => thread::sleep(Duration::from_millis(10)),
-                        Some(libc::ESRCH) => break,
-                        _ => return Err(err),
-                    },
+                loop {
+                    match util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }) {
+                        Ok(_) => thread::sleep(Duration::from_millis(10)),
+                        Err(err) => match err.raw_os_error() {
+                            Some(libc::EPERM) => thread::sleep(Duration::from_millis(10)),
+                            Some(libc::ESRCH) => break,
+                            _ => panic!("{}", err),
+                        },
+                    }
                 }
-            }
 
-            sandboxfs.unmount(mounts)?;
-            drop(sandboxfs);
+                sandboxfs.unmount(mounts).unwrap();
+            })?;
 
-            std::process::exit(0)
-        } else {
-            temp_dir.into_path();
+        HANDLES.lock().unwrap().push(Some(handle));
 
-            #[cfg(any(feature = "piped", feature = "piped-merged"))]
-            let stdin = ChildStdin(stdin_w);
-            #[cfg(feature = "piped")]
-            let stdout = ChildStdout(stdout_r);
-            #[cfg(feature = "piped-merged")]
-            let stdout = ChildStdout(stdout_r);
-            #[cfg(feature = "piped")]
-            let stderr = ChildStderr(stderr_r);
-            #[cfg(feature = "piped-merged")]
-            let stderr = None;
-            #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
-            let (stdin, stdout, stderr) = (None, None, None);
+        #[cfg(any(feature = "piped", feature = "piped-merged"))]
+        let stdin = ChildStdin(stdin_w);
+        #[cfg(feature = "piped")]
+        let stdout = ChildStdout(stdout_r);
+        #[cfg(feature = "piped-merged")]
+        let stdout = ChildStdout(stdout_r);
+        #[cfg(feature = "piped")]
+        let stderr = ChildStderr(stderr_r);
+        #[cfg(feature = "piped-merged")]
+        let stderr = None;
+        #[cfg(not(any(feature = "piped", feature = "piped-merged")))]
+        let (stdin, stdout, stderr) = (None, None, None);
 
-            Ok(Child::from_parts(stdin, stdout, stderr, sandbox_pid))
-        }
+        Ok(Child::from_parts(stdin, stdout, stderr, sandbox_pid))
     }
 }
 
@@ -220,4 +219,11 @@ impl<'a> Profile<'a> {
 extern "C" {
     fn sandbox_init(profile: *const c_char, flags: u64, errorbuf: *mut *mut c_char) -> c_int;
     fn sandbox_free_error(errorbuf: *mut c_char);
+}
+
+extern "C" fn on_shutdown() {
+    let mut handles = HANDLES.lock().unwrap_or_else(|e| e.into_inner());
+    for handle in handles.iter_mut().flat_map(|h| h.take()) {
+        handle.join().unwrap_or_else(|_| std::process::abort());
+    }
 }
