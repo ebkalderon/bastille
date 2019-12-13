@@ -156,9 +156,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             Err(error)
         }
     } else {
-        let mut sandboxfs = Sandboxfs::new(temp_dir)?;
-        let mounts = sandboxfs.mount(&config)?;
-
+        let sandboxfs = Sandboxfs::new(temp_dir, &config)?;
         let handle = thread::Builder::new()
             .name("sandboxfs-monitor".into())
             .spawn(move || {
@@ -175,7 +173,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
                     }
                 }
 
-                sandboxfs.unmount(mounts).unwrap();
+                drop(sandboxfs);
             })?;
 
         HANDLES.lock().unwrap().push(Some(handle));

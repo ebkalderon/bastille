@@ -2,13 +2,13 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::thread::JoinHandleExt;
-use std::path::{Path, PathBuf};
 use std::str;
-use std::thread::{Builder, JoinHandle};
+use std::thread::{self, JoinHandle};
 
 use libc::{c_int, gid_t, uid_t};
 use log::{debug, error};
-use os_pipe::{PipeReader, PipeWriter};
+use os_pipe::PipeWriter;
+use sandboxfs::Mapping;
 use tempfile::TempDir;
 use time::Timespec;
 
@@ -20,65 +20,41 @@ const TTL_SECONDS: i64 = 60;
 #[derive(Debug)]
 pub struct Sandboxfs {
     input: PipeWriter,
-    output: BufReader<PipeReader>,
     handle: Option<JoinHandle<()>>,
     mount_point: TempDir,
 }
 
 impl Sandboxfs {
-    pub fn new(mount_point: TempDir) -> Result<Self, Error> {
+    pub fn new(mount_point: TempDir, config: &Sandbox) -> Result<Self, Error> {
         let (input_read, input_write) = os_pipe::pipe()?;
         let (output_read, output_write) = os_pipe::pipe()?;
+        let mappings = to_sandboxfs_mappings(&config.mappings)?;
 
         let path = mount_point.path().join("mnt");
         fs::create_dir_all(&path)?;
-        let handle = Builder::new().name("sandboxfs".into()).spawn(move || {
-            let gid = unsafe { libc::getgid() };
-            util::catch_io_error(unsafe { pthread_setugid_np(0, gid) }).unwrap();
-            let ttl = Timespec::new(TTL_SECONDS, 0);
-            let input = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
-            let output = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
-            match sandboxfs::mount(&path, MOUNT_OPTIONS, &[], ttl, input, output) {
-                Ok(_) => error!("sandboxfs is not supposed to exit with Ok()"),
-                Err(msg) => debug!("sandboxfs exited with message: {}", msg),
-            }
-        })?;
+        let handle = thread::Builder::new()
+            .name("sandboxfs".into())
+            .spawn(move || {
+                let gid = unsafe { libc::getgid() };
+                util::catch_io_error(unsafe { pthread_setugid_np(0, gid) }).unwrap();
+
+                let ttl = Timespec::new(TTL_SECONDS, 0);
+                let input = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
+                let output = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
+                match sandboxfs::mount(&path, MOUNT_OPTIONS, &mappings[..], ttl, input, output) {
+                    Ok(_) => error!("sandboxfs is not supposed to exit with Ok()"),
+                    Err(msg) => debug!("sandboxfs exited with message: {}", msg),
+                }
+            })?;
+
+        let mut input = input_write;
+        block_until_mounted(&mut input, BufReader::new(output_read))?;
 
         Ok(Sandboxfs {
-            input: input_write,
-            output: BufReader::new(output_read),
+            input,
             handle: Some(handle),
             mount_point,
         })
-    }
-
-    pub fn mount(&mut self, config: &Sandbox) -> Result<Mounts, Error> {
-        let (mount_msg, unmount_msg) = to_sandboxfs_messages(&config.mappings)?;
-        writeln!(&mut self.input, "{}", mount_msg)?;
-        self.input.flush()?;
-
-        let mut message = String::new();
-        self.output.read_line(&mut message)?;
-
-        if message != "Done\n" {
-            return Err(Error::new(ErrorKind::Other, message));
-        }
-
-        let root_dir = self.mount_point.path().join("mnt");
-        Ok(Mounts::new(root_dir, unmount_msg))
-    }
-
-    pub fn unmount(&mut self, mounts: Mounts) -> Result<(), Error> {
-        writeln!(&mut self.input, "{}", mounts.unmount_message)?;
-
-        let mut message = String::new();
-        self.output.read_line(&mut message)?;
-
-        if message != "Done\n" {
-            return Err(Error::new(ErrorKind::Other, message));
-        }
-
-        Ok(())
     }
 }
 
@@ -97,48 +73,36 @@ impl Drop for Sandboxfs {
     }
 }
 
-#[derive(Debug)]
-pub struct Mounts {
-    root_dir: PathBuf,
-    unmount_message: String,
-}
-
-impl Mounts {
-    fn new(root_dir: PathBuf, unmount_message: String) -> Self {
-        Mounts {
-            root_dir,
-            unmount_message,
-        }
-    }
-
-    pub fn root_dir(&self) -> &Path {
-        &self.root_dir
-    }
-}
-
-fn to_sandboxfs_messages(mappings: &Mappings) -> Result<(String, String), Error> {
+fn to_sandboxfs_mappings(mappings: &Mappings) -> Result<Vec<Mapping>, Error> {
     let mappings = mappings.resolve_symlinks()?;
+    mappings
+        .into_iter()
+        .map(|m| {
+            let sandbox_path = m.sandbox_path().to_owned();
+            let host_path = m.host_path().to_owned();
+            Mapping::from_parts(sandbox_path, host_path, m.is_writable())
+                .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))
+        })
+        .collect()
+}
 
-    let mut mount_messages = Vec::with_capacity(mappings.len());
-    let mut unmount_messages = Vec::with_capacity(mappings.len());
+fn block_until_mounted<I, O>(mut input: I, mut output: O) -> Result<(), Error>
+where
+    I: Write,
+    O: BufRead,
+{
+    input.write(b"[]\n\n")?;
+    input.flush()?;
 
-    for mapping in mappings {
-        mount_messages.push(format!(
-            r#"{{"Map": {{"Mapping": {:?}, "Target": {:?}, "Writable": {}}}}}"#,
-            mapping.sandbox_path(),
-            mapping.host_path(),
-            mapping.is_writable()
-        ));
+    let mut message = String::new();
+    output.read_line(&mut message)?;
 
-        unmount_messages.push(format!(r#"{{"Unmap": {:?}}}"#, mapping.sandbox_path()));
+    if message != "Done\n" {
+        let error = format!("Received invalid sandboxfs response: {:?}", message);
+        return Err(Error::new(ErrorKind::Other, error));
     }
 
-    let mount_msg = format!("[{}]\n", mount_messages.join(","));
-    let unmount_msg = format!("[{}]\n", unmount_messages.join(","));
-    debug!("mount message: {}", mount_msg.replace("\n", "\\n"));
-    debug!("unmount message: {}", unmount_msg.replace("\n", "\\n"));
-
-    Ok((mount_msg, unmount_msg))
+    Ok(())
 }
 
 #[link(name = "c")]
