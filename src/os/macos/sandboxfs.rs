@@ -6,12 +6,13 @@ use std::path::{Path, PathBuf};
 use std::str;
 use std::thread::{Builder, JoinHandle};
 
+use libc::{c_int, gid_t, uid_t};
 use log::{debug, error};
 use os_pipe::{PipeReader, PipeWriter};
 use tempfile::TempDir;
 use time::Timespec;
 
-use crate::{Mappings, Sandbox};
+use crate::{util, Mappings, Sandbox};
 
 const MOUNT_OPTIONS: &[&'static str] = &["-o", "fsname=sandboxfs", "-o", "allow_other"];
 const TTL_SECONDS: i64 = 60;
@@ -32,6 +33,8 @@ impl Sandboxfs {
         let path = mount_point.path().join("mnt");
         fs::create_dir_all(&path)?;
         let handle = Builder::new().name("sandboxfs".into()).spawn(move || {
+            let gid = unsafe { libc::getgid() };
+            util::catch_io_error(unsafe { pthread_setugid_np(0, gid) }).unwrap();
             let ttl = Timespec::new(TTL_SECONDS, 0);
             let input = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
             let output = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
@@ -136,4 +139,9 @@ fn to_sandboxfs_messages(mappings: &Mappings) -> Result<(String, String), Error>
     debug!("unmount message: {}", unmount_msg.replace("\n", "\\n"));
 
     Ok((mount_msg, unmount_msg))
+}
+
+#[link(name = "c")]
+extern "C" {
+    fn pthread_setugid_np(uid: uid_t, gid: gid_t) -> c_int;
 }

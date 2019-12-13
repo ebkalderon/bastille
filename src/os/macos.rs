@@ -158,8 +158,6 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
             #[cfg(feature = "piped")]
             drop(stderr_r);
 
-            util::catch_io_error(unsafe { libc::setuid(0) })?;
-
             let mut sandboxfs = Sandboxfs::new(temp_dir)?;
             let mounts = sandboxfs.mount(&config)?;
             tx.write(&[0])?;
