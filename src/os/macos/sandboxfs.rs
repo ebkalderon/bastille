@@ -4,7 +4,7 @@ use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::thread::JoinHandleExt;
 use std::path::{Path, PathBuf};
 use std::str;
-use std::thread::{self, JoinHandle};
+use std::thread::{Builder, JoinHandle};
 
 use log::{debug, error};
 use os_pipe::{PipeReader, PipeWriter};
@@ -31,7 +31,7 @@ impl Sandboxfs {
 
         let path = mount_point.path().join("mnt");
         fs::create_dir_all(&path)?;
-        let handle = thread::spawn(move || {
+        let handle = Builder::new().name("sandboxfs".into()).spawn(move || {
             let ttl = Timespec::new(TTL_SECONDS, 0);
             let input = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
             let output = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
@@ -39,7 +39,7 @@ impl Sandboxfs {
                 Ok(_) => error!("sandboxfs is not supposed to exit with Ok()"),
                 Err(msg) => debug!("sandboxfs exited with message: {}", msg),
             }
-        });
+        })?;
 
         Ok(Sandboxfs {
             input: input_write,
