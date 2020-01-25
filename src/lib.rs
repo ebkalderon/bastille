@@ -248,3 +248,9 @@ impl Sandbox {
         os::create_sandbox(self, command)
     }
 }
+
+impl Default for Sandbox {
+    fn default() -> Self {
+        Sandbox::new()
+    }
+}

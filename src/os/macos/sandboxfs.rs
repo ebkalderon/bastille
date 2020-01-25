@@ -14,7 +14,7 @@ use time::Timespec;
 
 use crate::{util, Mappings, Sandbox};
 
-const MOUNT_OPTIONS: &[&'static str] = &["-o", "fsname=sandboxfs", "-o", "allow_other"];
+const MOUNT_OPTIONS: &[&str] = &["-o", "fsname=sandboxfs", "-o", "allow_other"];
 const TTL_SECONDS: i64 = 60;
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ where
     I: Write,
     O: BufRead,
 {
-    input.write(b"[]\n\n")?;
+    input.write_all(b"[]\n\n")?;
     input.flush()?;
 
     let mut message = String::new();

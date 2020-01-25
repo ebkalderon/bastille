@@ -67,7 +67,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let mount_point = temp_dir.into_path().join("mnt");
 
         let mut buf = [0u8; 1];
-        rx.read(&mut buf)?;
+        rx.read_exact(&mut buf)?;
         rx.shutdown(Shutdown::Both)?;
         drop(rx);
 
@@ -160,7 +160,7 @@ pub fn create_sandbox(config: &Sandbox, command: &mut Command) -> Result<Child, 
         let handle = thread::Builder::new()
             .name("sandboxfs-monitor".into())
             .spawn(move || {
-                tx.write(&[0]).unwrap();
+                tx.write_all(&[0]).unwrap();
 
                 loop {
                     match util::catch_io_error(unsafe { libc::kill(sandbox_pid, 0) }) {
