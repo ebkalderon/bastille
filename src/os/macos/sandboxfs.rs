@@ -3,12 +3,13 @@ use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::os::unix::thread::JoinHandleExt;
 use std::str;
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use libc::{c_int, gid_t, uid_t};
 use log::{debug, error};
 use os_pipe::PipeWriter;
-use sandboxfs::Mapping;
+use sandboxfs::{Mapping, NoCache};
 use tempfile::TempDir;
 use time::Timespec;
 
@@ -39,9 +40,22 @@ impl Sandboxfs {
                 util::catch_io_error(unsafe { pthread_setugid_np(0, gid) }).unwrap();
 
                 let ttl = Timespec::new(TTL_SECONDS, 0);
-                let input = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
-                let output = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
-                match sandboxfs::mount(&path, MOUNT_OPTIONS, &mappings[..], ttl, input, output) {
+                let cache = Arc::new(NoCache::default());
+                let xattrs = true;
+                let threads = num_cpus::get();
+                let in_ = unsafe { File::from_raw_fd(input_read.into_raw_fd()) };
+                let out = unsafe { File::from_raw_fd(output_write.into_raw_fd()) };
+                match sandboxfs::mount(
+                    &path,
+                    MOUNT_OPTIONS,
+                    &mappings[..],
+                    ttl,
+                    cache,
+                    xattrs,
+                    in_,
+                    out,
+                    threads,
+                ) {
                     Ok(_) => error!("sandboxfs is not supposed to exit with Ok()"),
                     Err(msg) => debug!("sandboxfs exited with message: {}", msg),
                 }
@@ -96,11 +110,6 @@ where
 
     let mut message = String::new();
     output.read_line(&mut message)?;
-
-    if message != "Done\n" {
-        let error = format!("Received invalid sandboxfs response: {:?}", message);
-        return Err(Error::new(ErrorKind::Other, error));
-    }
 
     Ok(())
 }
